@@ -2,19 +2,22 @@ import edge_tts
 import asyncio
 import os
 
-async def speak(text: str, emotion: str = "neutral"):
+async def speak(text: str, language: str = "en", emotion: str = "neutral"):
     """
-    Aria speaks using a female neural voice.
-    Emotion will later control speed and tone.
+    Aria speaks in English or Hindi with female voice.
     """
 
-    voice = "en-US-AriaNeural"   # Female voice
+    # Choose voice based on language
+    if language == "hi":
+        voice = "hi-IN-SwaraNeural"   # Female Hindi voice
+    else:
+        voice = "en-US-AriaNeural"    # Female English voice
 
-    # Adjust speaking rate based on emotion
+    # Adjust speed based on emotion
     if emotion in ["sad", "tired", "dull"]:
         rate = "-15%"
     elif emotion in ["happy", "excited"]:
-        rate = "+12%"
+        rate = "+10%"
     else:
         rate = "+0%"
 
@@ -25,11 +28,9 @@ async def speak(text: str, emotion: str = "neutral"):
     )
 
     await communicate.save("aria_output.mp3")
-
-    # Play the audio (Windows)
     os.system("start aria_output.mp3")
 
 
 # Test
 if __name__ == "__main__":
-    asyncio.run(speak("Hello, I am Aria. I'm here with you."))
+    asyncio.run(speak("नमस्ते, मैं आर्या हूँ।", language="hi"))
