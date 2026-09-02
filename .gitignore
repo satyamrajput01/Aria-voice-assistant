@@ -1,0 +1,12 @@
+.env
+.env.local
+__pycache__/
+*.py[cod]
+*.mp3
+*.wav
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+venv/
+.venv/
