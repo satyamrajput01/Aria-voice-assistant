@@ -1,36 +1,52 @@
-import edge_tts
-import asyncio
 import os
+from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+
+load_dotenv()
+
+api_key = os.getenv("ELEVENLABS_API_KEY")
+
+if not api_key:
+    raise ValueError("ELEVENLABS_API_KEY is missing from .env")
+
+client = ElevenLabs(api_key=api_key)
+
+VOICE_ID = "zzyrrX00vfq8JzvcccMi"
+
 
 async def speak(text: str, language: str = "en", emotion: str = "neutral"):
-    """
-    Aria speaks in English or Hindi with female voice.
-    """
+    try:
+        # Adjust speaking speed based on emotion
+        if emotion in ["sad", "tired"]:
+            speed = 0.90
+        elif emotion in ["happy", "excited"]:
+            speed = 1.08
+        elif emotion == "angry":
+            speed = 0.95
+        else:
+            speed = 1.0
 
-    # Choose voice based on language
-    if language == "hi":
-        voice = "hi-IN-SwaraNeural"   # Female Hindi voice
-    else:
-        voice = "en-US-AriaNeural"    # Female English voice
+        audio = client.text_to_speech.convert(
+            voice_id=VOICE_ID,
+            text=text,
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128",
+            voice_settings={
+                "stability": 0.45,
+                "similarity_boost": 0.80,
+                "style": 0.35,
+                "use_speaker_boost": True,
+                "speed": speed,
+            },
+        )
 
-    # Adjust speed based on emotion
-    if emotion in ["sad", "tired", "dull"]:
-        rate = "-15%"
-    elif emotion in ["happy", "excited"]:
-        rate = "+10%"
-    else:
-        rate = "+0%"
+        filename = "aria_output.mp3"
 
-    communicate = edge_tts.Communicate(
-        text=text,
-        voice=voice,
-        rate=rate
-    )
+        with open(filename, "wb") as f:
+            for chunk in audio:
+                f.write(chunk)
 
-    await communicate.save("aria_output.mp3")
-    os.system("start aria_output.mp3")
+        os.startfile(filename)
 
-
-# Test
-if __name__ == "__main__":
-    asyncio.run(speak("नमस्ते, मैं आर्या हूँ।", language="hi"))
+    except Exception as e:
+        print("ElevenLabs TTS error:", e)
