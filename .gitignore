@@ -11,3 +11,5 @@ Thumbs.db
 venv/
 .venv/
 data/models/fairhindiser/ 
+models/fairhindiser/
+data/
