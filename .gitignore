@@ -10,4 +10,4 @@ __pycache__/
 Thumbs.db
 venv/
 .venv/
-data/
+data/models/fairhindiser/ 
