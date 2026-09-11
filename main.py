@@ -5,27 +5,300 @@ from core.speech_to_text import listen
 from core.text_to_speech import speak
 from core.brain import get_reply
 from core.emotion_detector import detect_emotion
+from core.emotion_fusion import detect_fused_emotion
 from core.memory import save_memory
 
 
+# ==========================================================
+# LANGUAGE DETECTION
+# ==========================================================
+
 def detect_language(text: str) -> str:
     """
-    Detect Hindi based on Devanagari characters.
-    Otherwise use English.
+    Detect Hindi, English, and Romanized Hindi/Hinglish.
+
+    Supports:
+    - Hindi written in Devanagari
+    - Romanized Hindi
+    - Hinglish
+    - English
+    - English words returned by STT in Devanagari
     """
 
-    for ch in text:
-        if '\u0900' <= ch <= '\u097F':
-            return "hi"
+    text = text.strip()
+
+    if not text:
+        return "en"
+
+    text_lower = text.lower()
+
+    # ------------------------------------------------------
+    # COMMON ENGLISH WORDS
+    # ------------------------------------------------------
+
+    english_words = {
+        "i", "me", "my", "you", "your", "we", "our",
+        "they", "he", "she", "it", "this", "that",
+
+        "am", "is", "are", "was", "were",
+        "have", "has", "had",
+        "do", "does", "did",
+        "can", "could", "would", "should",
+
+        "very", "really", "extremely", "little", "bit",
+        "happy", "sad", "angry", "excited", "tired",
+        "exhausted", "frustrated", "frustrating",
+
+        "good", "great", "bad", "fine", "okay", "better",
+        "best", "worst",
+
+        "feel", "feeling", "felt",
+        "love", "like", "want", "need",
+        "talk", "speak", "listen", "help",
+
+        "today", "tomorrow", "yesterday",
+        "going", "everything", "nothing", "something",
+
+        "tell", "give", "show", "what", "why",
+        "how", "when", "where", "who",
+
+        "hello", "hey", "hi",
+        "please", "thanks", "thank",
+        "joke", "funny",
+
+        "computer", "phone", "laptop",
+        "code", "coding", "project",
+    }
+
+    # ------------------------------------------------------
+    # ROMANIZED HINDI / HINGLISH
+    # ------------------------------------------------------
+
+    hindi_words = {
+        # Pronouns
+        "main", "mai", "mein",
+        "mujhe", "mujh", "mujhse",
+        "mera", "meri", "mere",
+        "hum", "ham",
+        "humara", "hamara",
+        "humari", "hamari",
+        "tum", "tumhe", "tumse",
+        "tumhara", "tumhari", "tumhare",
+        "aap", "aapko", "aapka", "aapki", "aapke",
+
+        # Helping verbs
+        "hai", "hain", "ho", "hun", "hoon",
+        "tha", "thi", "the",
+
+        # Verbs
+        "raha", "rahi", "rahe",
+        "kar", "karke", "karna", "karne",
+        "karo", "karte", "karti",
+        "kiya", "kiye",
+        "gaya", "gayi", "gaye",
+        "aa", "aana", "aaya", "aayi",
+        "jaa", "jana", "jane", "jao", "jaana",
+        "de", "dena", "diya", "do",
+        "lelo", "lena", "liya",
+        "bata", "batao", "batana",
+        "bol", "bolo",
+        "sun", "suno",
+        "dekh", "dekho",
+        "dikha", "dikhao",
+
+        # Common Hindi
+        "aaj", "kal", "abhi",
+        "bahut", "bohot",
+        "achcha", "achha", "accha", "acha",
+        "bura", "kya", "kyu", "kyun",
+        "kaise", "kaisa", "kaisi",
+        "kab", "kahan", "kahaan", "kaun",
+        "kyon", "kyunki", "kyonki",
+        "nahi", "nahin", "haan",
+        "yaar", "bhai", "dost",
+        "baat", "baatein", "baatain",
+        "kuch", "kuchh",
+        "sab", "sabhi", "sirf",
+        "phir", "fir",
+        "ab", "toh", "to", "bhi",
+        "hi", "aur", "lekin", "magar",
+        "isliye", "agar", "jab", "jabki",
+        "jo", "yeh", "ye",
+        "woh", "vo",
+        "iska", "iski", "uska", "uski",
+
+        # Feelings / states
+        "khush", "khushi",
+        "dukhi", "dard",
+        "thak", "thaka", "thaki", "thake",
+        "pyaar", "pyar",
+        "pasand", "nafrat",
+        "gussa", "gusse",
+        "mann", "man",
+
+        # Conversation
+        "chahiye",
+        "chahta", "chahti", "chahte",
+        "sakta", "sakti", "sakte",
+        "pata", "malum", "maalum",
+        "samajh", "samjha", "samjhi",
+        "samajhta", "samajhti",
+        "lag", "lagta", "lagti", "laga",
+        "rakh", "rakhna", "rakho",
+        "yaad", "bhool", "bhul",
+
+        # Daily life
+        "time", "din", "raat",
+        "subah", "shaam",
+        "ghar", "college",
+        "padhai", "padhta", "padhti",
+        "student", "log", "insaan",
+    }
+
+    # ------------------------------------------------------
+    # NORMAL ROMANIZED TEXT ANALYSIS
+    # ------------------------------------------------------
+
+    words = re.findall(
+        r"[a-zA-Z]+",
+        text_lower
+    )
+
+    hindi_matches = sum(
+        1
+        for word in words
+        if word in hindi_words
+    )
+
+    english_matches = sum(
+        1
+        for word in words
+        if word in english_words
+    )
+
+    total_words = len(words)
+
+    # Clear Romanized Hindi / Hinglish
+    if hindi_matches >= 2:
+        return "hi"
+
+    # Short Hindi phrase
+    if total_words <= 3 and hindi_matches >= 1:
+        return "hi"
+
+    # Clear English
+    if english_matches >= 1 and hindi_matches == 0:
+        return "en"
+
+    # ------------------------------------------------------
+    # DEVANAGARI ANALYSIS
+    # ------------------------------------------------------
+
+    has_devanagari = any(
+        "\u0900" <= ch <= "\u097F"
+        for ch in text
+    )
+
+    if has_devanagari:
+
+        # --------------------------------------------------
+        # English words that Google may return in
+        # Devanagari phonetic form.
+        # --------------------------------------------------
+
+        devanagari_english = {
+            "वेरी",
+            "साद",
+            "हैप्पी",
+            "हैपी",
+            "एंग्री",
+            "एक्साइटेड",
+            "टायर्ड",
+            "एक्सॉस्टेड",
+            "फ्रस्ट्रेटेड",
+            "फ्रस्ट्रेटिंग",
+
+            "ग्रेट",
+            "गुड",
+            "बैड",
+            "फाइन",
+            "ओके",
+
+            "गोइंग",
+            "टुडे",
+            "टुमॉरो",
+            "एवरीथिंग",
+            "नथिंग",
+            "समथिंग",
+
+            "रीयली",
+            "रियली",
+
+            "आई",
+            "यू",
+            "मी",
+            "माय",
+            "योर",
+            "वी",
+
+            "कैन",
+            "कुड",
+            "वुड",
+            "शुड",
+
+            "टेल",
+            "टॉक",
+            "स्पीक",
+            "लिसन",
+            "जोक",
+            "हेल्प",
+
+            "हैव",
+            "हैज़",
+            "एम",
+            "इज़",
+            "आर",
+
+            "फील",
+            "फीलिंग",
+            "लव",
+            "लाइक",
+            "वांट",
+            "नीड",
+
+            "व्हाट",
+            "व्हाय",
+            "हाउ",
+            "व्हेन",
+            "वेयर",
+            "हू",
+        }
+
+        devanagari_words = text.split()
+
+        phonetic_english_matches = sum(
+            1
+            for word in devanagari_words
+            if word.strip(".,!?।") in devanagari_english
+        )
+
+        if phonetic_english_matches >= 1:
+            return "en"
+
+        return "hi"
+
+    # ------------------------------------------------------
+    # DEFAULT
+    # ------------------------------------------------------
 
     return "en"
 
 
+# ==========================================================
+# MEMORY HELPERS
+# ==========================================================
+
 def clean_memory_value(value: str) -> str:
-    """
-    Clean common phrases that should not be stored
-    as part of the actual memory value.
-    """
 
     value = value.strip()
 
@@ -39,6 +312,7 @@ def clean_memory_value(value: str) -> str:
     ]
 
     for pattern in patterns:
+
         value = re.sub(
             pattern,
             "",
@@ -50,19 +324,6 @@ def clean_memory_value(value: str) -> str:
 
 
 def extract_name(value: str) -> str:
-    """
-    Extract only the person's name from a sentence.
-
-    Examples:
-
-    'Satyam' -> 'Satyam'
-
-    'Satyam remember it' -> 'Satyam'
-
-    'Satyam I am building Aria' -> 'Satyam'
-
-    'Satyam and I am a student' -> 'Satyam'
-    """
 
     value = clean_memory_value(value)
 
@@ -85,6 +346,7 @@ def extract_name(value: str) -> str:
     ]
 
     for pattern in stop_patterns:
+
         value = re.sub(
             pattern,
             "",
@@ -102,14 +364,11 @@ def extract_name(value: str) -> str:
     return value.strip()
 
 
-def handle_memory(user_input: str):
-    """
-    Detect simple personal information and save it to memory.
+# ==========================================================
+# MEMORY HANDLER
+# ==========================================================
 
-    Returns:
-        True  -> memory was saved
-        False -> nothing was saved
-    """
+def handle_memory(user_input: str):
 
     text = user_input.strip()
 
@@ -119,12 +378,9 @@ def handle_memory(user_input: str):
 
     name_patterns = [
         r"^my name is (.+)$",
-        r"^i am (.+)$",
-        r"^i'm (.+)$",
+        r"^i'm called (.+)$",
     ]
 
-    # Words that clearly indicate that "I am ..."
-    # is NOT a person's name.
     invalid_name_words = {
         "building",
         "making",
@@ -166,6 +422,7 @@ def handle_memory(user_input: str):
         "a",
         "an",
         "the",
+        "really",
     }
 
     for pattern in name_patterns:
@@ -178,26 +435,31 @@ def handle_memory(user_input: str):
 
         if match:
 
-            name = extract_name(match.group(1)).strip()
+            name = extract_name(
+                match.group(1)
+            ).strip()
 
             if not name:
                 continue
 
             words = name.split()
 
+            if not words:
+                continue
+
             first_word = words[0].lower()
 
-            # Reject obvious non-name statements.
             if first_word in invalid_name_words:
                 continue
 
-            # A name should normally contain only alphabetic
-            # words, with a maximum of two words.
             if len(words) > 2:
                 continue
 
             if not all(
-                re.fullmatch(r"[A-Za-z]+", word)
+                re.fullmatch(
+                    r"[A-Za-z]+",
+                    word
+                )
                 for word in words
             ):
                 continue
@@ -208,7 +470,10 @@ def handle_memory(user_input: str):
                 name
             )
 
-            print(f"Memory saved: name = {name}")
+            print(
+                f"Memory saved: name = {name}"
+            )
+
             return True
 
     # --------------------------------------------------
@@ -232,7 +497,9 @@ def handle_memory(user_input: str):
 
         if match:
 
-            name = extract_name(match.group(1)).strip()
+            name = extract_name(
+                match.group(1)
+            ).strip()
 
             if not name:
                 continue
@@ -243,7 +510,10 @@ def handle_memory(user_input: str):
                 continue
 
             if not all(
-                re.fullmatch(r"[A-Za-z]+", word)
+                re.fullmatch(
+                    r"[A-Za-z]+",
+                    word
+                )
                 for word in words
             ):
                 continue
@@ -254,7 +524,10 @@ def handle_memory(user_input: str):
                 name
             )
 
-            print(f"Memory saved: name = {name}")
+            print(
+                f"Memory saved: name = {name}"
+            )
+
             return True
 
     # --------------------------------------------------
@@ -289,7 +562,10 @@ def handle_memory(user_input: str):
                     thing
                 )
 
-                print(f"Memory saved: likes = {thing}")
+                print(
+                    f"Memory saved: likes = {thing}"
+                )
+
                 return True
 
     # --------------------------------------------------
@@ -325,7 +601,10 @@ def handle_memory(user_input: str):
                     thing
                 )
 
-                print(f"Memory saved: likes = {thing}")
+                print(
+                    f"Memory saved: likes = {thing}"
+                )
+
                 return True
 
     # --------------------------------------------------
@@ -359,7 +638,10 @@ def handle_memory(user_input: str):
                     thing
                 )
 
-                print(f"Memory saved: loves = {thing}")
+                print(
+                    f"Memory saved: loves = {thing}"
+                )
+
                 return True
 
     # --------------------------------------------------
@@ -436,11 +718,11 @@ def handle_memory(user_input: str):
     return False
 
 
+# ==========================================================
+# EXIT COMMAND
+# ==========================================================
+
 def is_exit_command(user_input: str) -> bool:
-    """
-    Detect actual exit commands without accidentally
-    treating words like 'buy' as 'bye'.
-    """
 
     normalized = user_input.lower().strip()
 
@@ -470,13 +752,15 @@ def is_exit_command(user_input: str) -> bool:
     if normalized in exit_commands:
         return True
 
-    # Handles:
-    # b y e
     if normalized.replace(" ", "") == "bye":
         return True
 
     return False
 
+
+# ==========================================================
+# MAIN
+# ==========================================================
 
 async def main():
 
@@ -490,20 +774,38 @@ async def main():
     while True:
 
         try:
-            user_input = listen()
+
+            # ----------------------------------------------
+            # LISTEN
+            # ----------------------------------------------
+
+            result = listen()
+
+            if not result:
+                continue
+
+            user_input, audio_data = result
+
+            if not user_input:
+                continue
 
         except KeyboardInterrupt:
+
             print()
             print("Aria stopped.")
             break
 
         except OSError as e:
+
             print()
             print(f"Microphone error: {e}")
             print("Restarting microphone...")
             continue
 
-        if not user_input:
+        except Exception as e:
+
+            print()
+            print(f"Unexpected error: {e}")
             continue
 
         # ----------------------------------------------
@@ -513,19 +815,54 @@ async def main():
         handle_memory(user_input)
 
         # ----------------------------------------------
-        # LANGUAGE
+        # INPUT LANGUAGE
         # ----------------------------------------------
 
-        language = detect_language(user_input)
+        language = detect_language(
+            user_input
+        )
+
+        print(
+            f"Language: {language}"
+        )
 
         # ----------------------------------------------
-        # EMOTION
+        # VOICE EMOTION
         # ----------------------------------------------
 
-        emotion, confidence = detect_emotion(user_input)
+        voice_emotion, voice_confidence = detect_emotion(
+            audio_data
+        )
 
-        print(f"Emotion: {emotion}")
-        print(f"Confidence: {confidence:.2f}")
+        print(
+            f"Voice emotion: {voice_emotion}"
+        )
+
+        print(
+            f"Voice confidence: {voice_confidence:.2f}"
+        )
+
+        # ----------------------------------------------
+        # EMOTION FUSION
+        # ----------------------------------------------
+
+        emotion, confidence, emotion_source = detect_fused_emotion(
+            user_input,
+            voice_emotion,
+            voice_confidence
+        )
+
+        print(
+            f"Final emotion: {emotion}"
+        )
+
+        print(
+            f"Final confidence: {confidence:.2f}"
+        )
+
+        print(
+            f"Emotion source: {emotion_source}"
+        )
 
         # ----------------------------------------------
         # EXIT
@@ -562,25 +899,50 @@ async def main():
             language=language
         )
 
-        print(f"Aria: {reply}")
-        print()
+        print(
+            f"Aria: {reply}"
+        )
 
         # ----------------------------------------------
-        # ARIA VOICE
+        # DETECT LANGUAGE OF ACTUAL ARIA RESPONSE
+        # ----------------------------------------------
+
+        if re.search(
+            r"[\u0900-\u097F]",
+            reply
+        ):
+            output_language = "hi"
+        else:
+            output_language = "en"
+
+        print(
+            f"Aria output language: {output_language}"
+        )
+
+        # ----------------------------------------------
+        # SPEAK
         # ----------------------------------------------
 
         await speak(
             reply,
-            language=language,
+            language=output_language,
             emotion=emotion
         )
 
 
+# ==========================================================
+# START ARIA
+# ==========================================================
+
 if __name__ == "__main__":
 
     try:
-        asyncio.run(main())
+
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
+
         print()
         print("Aria stopped.")
