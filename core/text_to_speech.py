@@ -37,24 +37,6 @@ KOKORO_SCRIPT = os.path.join(
 
 
 # ============================================================
-# EMOTION SPEED
-# ============================================================
-
-def get_speed(emotion: str) -> float:
-
-    if emotion in ["sad", "tired"]:
-        return 0.90
-
-    if emotion in ["happy", "excited"]:
-        return 1.08
-
-    if emotion == "angry":
-        return 0.95
-
-    return 1.0
-
-
-# ============================================================
 # LANGUAGE NORMALIZATION
 # ============================================================
 
@@ -165,8 +147,7 @@ def speak_with_kokoro(
 
 async def speak(
     text: str,
-    language: str = "en",
-    emotion: str = "neutral"
+    language: str = "en"
 ):
 
     if not text:
@@ -184,10 +165,6 @@ async def speak(
 
         print(
             "Using ElevenLabs voice..."
-        )
-
-        speed = get_speed(
-            emotion
         )
 
         audio = client.text_to_speech.convert(
@@ -209,8 +186,6 @@ async def speak(
                 "style": 0.35,
 
                 "use_speaker_boost": True,
-
-                "speed": speed,
             },
         )
 

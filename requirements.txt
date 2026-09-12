@@ -1,0 +1,8 @@
+groq
+python-dotenv
+SpeechRecognition
+elevenlabs
+kokoro
+soundfile
+numpy
+PyAudio

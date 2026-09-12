@@ -4,8 +4,6 @@ import re
 from core.speech_to_text import listen
 from core.text_to_speech import speak
 from core.brain import get_reply
-from core.emotion_detector import detect_emotion
-from core.emotion_fusion import detect_fused_emotion
 from core.memory import save_memory
 
 
@@ -46,8 +44,6 @@ def detect_language(text: str) -> str:
         "can", "could", "would", "should",
 
         "very", "really", "extremely", "little", "bit",
-        "happy", "sad", "angry", "excited", "tired",
-        "exhausted", "frustrated", "frustrating",
 
         "good", "great", "bad", "fine", "okay", "better",
         "best", "worst",
@@ -127,16 +123,7 @@ def detect_language(text: str) -> str:
         "woh", "vo",
         "iska", "iski", "uska", "uski",
 
-        # Feelings / states
-        "khush", "khushi",
-        "dukhi", "dard",
-        "thak", "thaka", "thaki", "thake",
-        "pyaar", "pyar",
-        "pasand", "nafrat",
-        "gussa", "gusse",
-        "mann", "man",
-
-        # Conversation
+        # General conversation
         "chahiye",
         "chahta", "chahti", "chahte",
         "sakta", "sakti", "sakte",
@@ -208,16 +195,6 @@ def detect_language(text: str) -> str:
 
         devanagari_english = {
             "वेरी",
-            "साद",
-            "हैप्पी",
-            "हैपी",
-            "एंग्री",
-            "एक्साइटेड",
-            "टायर्ड",
-            "एक्सॉस्टेड",
-            "फ्रस्ट्रेटेड",
-            "फ्रस्ट्रेटिंग",
-
             "ग्रेट",
             "गुड",
             "बैड",
@@ -372,9 +349,9 @@ def handle_memory(user_input: str):
 
     text = user_input.strip()
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # NAME - ENGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     name_patterns = [
         r"^my name is (.+)$",
@@ -404,11 +381,6 @@ def handle_memory(user_input: str):
         "eating",
         "drinking",
         "sleeping",
-        "tired",
-        "happy",
-        "sad",
-        "angry",
-        "excited",
         "busy",
         "fine",
         "okay",
@@ -476,9 +448,9 @@ def handle_memory(user_input: str):
 
             return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # NAME - HINDI / HINGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     hindi_name_patterns = [
         r"^mera naam (.+?) hai$",
@@ -530,9 +502,9 @@ def handle_memory(user_input: str):
 
             return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # LIKES - ENGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     like_patterns = [
         r"^i like (.+)$",
@@ -568,9 +540,9 @@ def handle_memory(user_input: str):
 
                 return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # LIKES - HINDI / HINGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     hindi_like_patterns = [
         r"^mujhe (.+?) pasand hai$",
@@ -607,9 +579,9 @@ def handle_memory(user_input: str):
 
                 return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # LOVE - ENGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     love_patterns = [
         r"^i love (.+)$",
@@ -644,9 +616,9 @@ def handle_memory(user_input: str):
 
                 return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # FAVORITES - ENGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     favorite_match = re.match(
         r"^my favorite (.+?) is (.+)$",
@@ -676,9 +648,9 @@ def handle_memory(user_input: str):
 
             return True
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # FAVORITES - HINGLISH
-    # --------------------------------------------------
+    # ------------------------------------------------------
 
     hindi_favorite_patterns = [
         r"^meri favorite (.+?) (.+?) hai$",
@@ -827,44 +799,6 @@ async def main():
         )
 
         # ----------------------------------------------
-        # VOICE EMOTION
-        # ----------------------------------------------
-
-        voice_emotion, voice_confidence = detect_emotion(
-            audio_data
-        )
-
-        print(
-            f"Voice emotion: {voice_emotion}"
-        )
-
-        print(
-            f"Voice confidence: {voice_confidence:.2f}"
-        )
-
-        # ----------------------------------------------
-        # EMOTION FUSION
-        # ----------------------------------------------
-
-        emotion, confidence, emotion_source = detect_fused_emotion(
-            user_input,
-            voice_emotion,
-            voice_confidence
-        )
-
-        print(
-            f"Final emotion: {emotion}"
-        )
-
-        print(
-            f"Final confidence: {confidence:.2f}"
-        )
-
-        print(
-            f"Emotion source: {emotion_source}"
-        )
-
-        # ----------------------------------------------
         # EXIT
         # ----------------------------------------------
 
@@ -874,16 +808,14 @@ async def main():
 
                 await speak(
                     "अलविदा। अपना ख्याल रखना।",
-                    language="hi",
-                    emotion="neutral"
+                    language="hi"
                 )
 
             else:
 
                 await speak(
                     "Goodbye. Take care.",
-                    language="en",
-                    emotion="neutral"
+                    language="en"
                 )
 
             break
@@ -894,8 +826,6 @@ async def main():
 
         reply = get_reply(
             user_input=user_input,
-            emotion=emotion,
-            confidence=confidence,
             language=language
         )
 
@@ -925,8 +855,7 @@ async def main():
 
         await speak(
             reply,
-            language=output_language,
-            emotion=emotion
+            language=output_language
         )
 
 
