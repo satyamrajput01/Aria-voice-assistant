@@ -5,6 +5,7 @@ from core.speech_to_text import listen
 from core.text_to_speech import speak
 from core.brain import get_reply
 from core.memory import save_memory
+from commands.intent import detect_intent
 
 
 # ==========================================================
@@ -13,14 +14,7 @@ from core.memory import save_memory
 
 def detect_language(text: str) -> str:
     """
-    Detect Hindi, English, and Romanized Hindi/Hinglish.
-
-    Supports:
-    - Hindi written in Devanagari
-    - Romanized Hindi
-    - Hinglish
-    - English
-    - English words returned by STT in Devanagari
+    Detect English, Hindi, and Hinglish.
     """
 
     text = text.strip()
@@ -45,25 +39,29 @@ def detect_language(text: str) -> str:
 
         "very", "really", "extremely", "little", "bit",
 
-        "good", "great", "bad", "fine", "okay", "better",
-        "best", "worst",
+        "good", "great", "bad", "fine", "okay",
+        "better", "best", "worst",
 
         "feel", "feeling", "felt",
         "love", "like", "want", "need",
+
         "talk", "speak", "listen", "help",
+        "tell", "give", "show",
 
-        "today", "tomorrow", "yesterday",
-        "going", "everything", "nothing", "something",
-
-        "tell", "give", "show", "what", "why",
-        "how", "when", "where", "who",
+        "what", "why", "how", "when",
+        "where", "who",
 
         "hello", "hey", "hi",
         "please", "thanks", "thank",
+
         "joke", "funny",
 
         "computer", "phone", "laptop",
         "code", "coding", "project",
+
+        "college", "university",
+        "student", "developer",
+        "engineering", "course",
     }
 
     # ------------------------------------------------------
@@ -71,79 +69,128 @@ def detect_language(text: str) -> str:
     # ------------------------------------------------------
 
     hindi_words = {
-        # Pronouns
         "main", "mai", "mein",
         "mujhe", "mujh", "mujhse",
         "mera", "meri", "mere",
         "hum", "ham",
         "humara", "hamara",
         "humari", "hamari",
+
         "tum", "tumhe", "tumse",
         "tumhara", "tumhari", "tumhare",
-        "aap", "aapko", "aapka", "aapki", "aapke",
 
-        # Helping verbs
-        "hai", "hain", "ho", "hun", "hoon",
+        "aap", "aapko",
+        "aapka", "aapki", "aapke",
+
+        "hai", "hain", "ho",
+        "hun", "hoon",
         "tha", "thi", "the",
 
-        # Verbs
         "raha", "rahi", "rahe",
-        "kar", "karke", "karna", "karne",
+        "kar", "karke",
+        "karna", "karne",
         "karo", "karte", "karti",
+
         "kiya", "kiye",
         "gaya", "gayi", "gaye",
+
         "aa", "aana", "aaya", "aayi",
-        "jaa", "jana", "jane", "jao", "jaana",
+        "jaa", "jana", "jane",
+        "jao", "jaana",
+
         "de", "dena", "diya", "do",
         "lelo", "lena", "liya",
+
         "bata", "batao", "batana",
         "bol", "bolo",
         "sun", "suno",
+
         "dekh", "dekho",
         "dikha", "dikhao",
 
-        # Common Hindi
         "aaj", "kal", "abhi",
         "bahut", "bohot",
-        "achcha", "achha", "accha", "acha",
-        "bura", "kya", "kyu", "kyun",
-        "kaise", "kaisa", "kaisi",
-        "kab", "kahan", "kahaan", "kaun",
-        "kyon", "kyunki", "kyonki",
-        "nahi", "nahin", "haan",
-        "yaar", "bhai", "dost",
-        "baat", "baatein", "baatain",
-        "kuch", "kuchh",
-        "sab", "sabhi", "sirf",
-        "phir", "fir",
-        "ab", "toh", "to", "bhi",
-        "hi", "aur", "lekin", "magar",
-        "isliye", "agar", "jab", "jabki",
-        "jo", "yeh", "ye",
-        "woh", "vo",
-        "iska", "iski", "uska", "uski",
 
-        # General conversation
+        "achcha", "achha",
+        "accha", "acha",
+
+        "bura",
+        "kya", "kyu", "kyun",
+        "kaise", "kaisa", "kaisi",
+
+        "kab", "kahan", "kahaan",
+        "kaun",
+
+        "kyon", "kyunki", "kyonki",
+
+        "nahi", "nahin",
+        "haan",
+
+        "yaar", "bhai", "dost",
+
+        "baat", "baatein", "baatain",
+
+        "kuch", "kuchh",
+        "sab", "sabhi",
+        "sirf",
+
+        "phir", "fir",
+        "ab",
+        "toh", "to",
+        "bhi",
+
+        "hi", "aur",
+        "lekin", "magar",
+
+        "isliye",
+        "agar",
+        "jab",
+        "jabki",
+
+        "jo",
+        "yeh", "ye",
+        "woh", "vo",
+
+        "iska", "iski",
+        "uska", "uski",
+
         "chahiye",
         "chahta", "chahti", "chahte",
-        "sakta", "sakti", "sakte",
-        "pata", "malum", "maalum",
-        "samajh", "samjha", "samjhi",
-        "samajhta", "samajhti",
-        "lag", "lagta", "lagti", "laga",
-        "rakh", "rakhna", "rakho",
-        "yaad", "bhool", "bhul",
 
-        # Daily life
-        "time", "din", "raat",
+        "sakta", "sakti", "sakte",
+
+        "pata",
+        "malum", "maalum",
+
+        "samajh",
+        "samjha", "samjhi",
+        "samajhta", "samajhti",
+
+        "lag", "lagta",
+        "lagti", "laga",
+
+        "rakh", "rakhna", "rakho",
+
+        "yaad",
+        "bhool", "bhul",
+
+        "time",
+        "din", "raat",
         "subah", "shaam",
-        "ghar", "college",
-        "padhai", "padhta", "padhti",
-        "student", "log", "insaan",
+
+        "ghar",
+        "college",
+
+        "padhai",
+        "padhta", "padhti",
+
+        "student",
+        "log",
+        "insaan",
     }
 
     # ------------------------------------------------------
-    # NORMAL ROMANIZED TEXT ANALYSIS
+    # ROMANIZED TEXT ANALYSIS
     # ------------------------------------------------------
 
     words = re.findall(
@@ -165,20 +212,17 @@ def detect_language(text: str) -> str:
 
     total_words = len(words)
 
-    # Clear Romanized Hindi / Hinglish
     if hindi_matches >= 2:
         return "hi"
 
-    # Short Hindi phrase
     if total_words <= 3 and hindi_matches >= 1:
         return "hi"
 
-    # Clear English
     if english_matches >= 1 and hindi_matches == 0:
         return "en"
 
     # ------------------------------------------------------
-    # DEVANAGARI ANALYSIS
+    # DEVANAGARI
     # ------------------------------------------------------
 
     has_devanagari = any(
@@ -187,11 +231,6 @@ def detect_language(text: str) -> str:
     )
 
     if has_devanagari:
-
-        # --------------------------------------------------
-        # English words that Google may return in
-        # Devanagari phonetic form.
-        # --------------------------------------------------
 
         devanagari_english = {
             "वेरी",
@@ -264,18 +303,17 @@ def detect_language(text: str) -> str:
 
         return "hi"
 
-    # ------------------------------------------------------
-    # DEFAULT
-    # ------------------------------------------------------
-
     return "en"
 
 
 # ==========================================================
-# MEMORY HELPERS
+# MEMORY UTILITIES
 # ==========================================================
 
 def clean_memory_value(value: str) -> str:
+
+    if not value:
+        return ""
 
     value = value.strip()
 
@@ -283,6 +321,7 @@ def clean_memory_value(value: str) -> str:
         r",?\s*please remember( this| it)?\.?$",
         r",?\s*remember( this| it)?\.?$",
         r",?\s*do remember( this| it)?\.?$",
+
         r",?\s*yaad rakhna\.?$",
         r",?\s*yaad rakhna please\.?$",
         r",?\s*yaad rakhna isey\.?$",
@@ -300,62 +339,60 @@ def clean_memory_value(value: str) -> str:
     return value.strip(" .,!?-")
 
 
-def extract_name(value: str) -> str:
+def clean_phrase(value: str) -> str:
 
     value = clean_memory_value(value)
 
-    stop_patterns = [
-        r"\s+i am\b.*$",
-        r"\s+i'm\b.*$",
-        r"\s+im\b.*$",
-        r"\s+i want\b.*$",
-        r"\s+i like\b.*$",
-        r"\s+i love\b.*$",
-        r"\s+i enjoy\b.*$",
-        r"\s+i live\b.*$",
-        r"\s+i study\b.*$",
-        r"\s+i am building\b.*$",
-        r"\s+i'm building\b.*$",
-        r"\s+remember\b.*$",
-        r"\s+please remember\b.*$",
-        r"\s+do remember\b.*$",
-        r"\s+yaad rakhna\b.*$",
-    ]
-
-    for pattern in stop_patterns:
-
-        value = re.sub(
-            pattern,
-            "",
-            value,
-            flags=re.IGNORECASE
-        )
-
-    value = value.strip(" .,!?-")
-
-    words = value.split()
-
-    if len(words) > 2:
-        value = " ".join(words[:2])
+    value = re.sub(
+        r"\s+",
+        " ",
+        value
+    )
 
     return value.strip()
 
 
+def valid_memory_value(value: str) -> bool:
+
+    if not value:
+        return False
+
+    value = value.strip()
+
+    if len(value) < 2:
+        return False
+
+    if len(value) > 200:
+        return False
+
+    return True
+
+
 # ==========================================================
-# MEMORY HANDLER
+# SMART PERSONAL MEMORY
 # ==========================================================
 
 def handle_memory(user_input: str):
 
     text = user_input.strip()
 
-    # ------------------------------------------------------
-    # NAME - ENGLISH
-    # ------------------------------------------------------
+    if not text:
+        return False
+
+    # ======================================================
+    # NAME
+    # ======================================================
 
     name_patterns = [
         r"^my name is (.+)$",
         r"^i'm called (.+)$",
+        r"^i am called (.+)$",
+
+        r"^mera naam (.+?) hai$",
+        r"^mera naam (.+?) h$",
+
+        r"^main (.+?) hoon$",
+        r"^mai (.+?) hoon$",
     ]
 
     invalid_name_words = {
@@ -391,10 +428,8 @@ def handle_memory(user_input: str):
         "boy",
         "girl",
         "person",
-        "a",
-        "an",
-        "the",
         "really",
+        "very",
     }
 
     for pattern in name_patterns:
@@ -405,61 +440,64 @@ def handle_memory(user_input: str):
             flags=re.IGNORECASE
         )
 
-        if match:
+        if not match:
+            continue
 
-            name = extract_name(
-                match.group(1)
-            ).strip()
+        name = clean_phrase(
+            match.group(1)
+        )
 
-            if not name:
-                continue
+        words = name.split()
 
-            words = name.split()
+        if not words:
+            continue
 
-            if not words:
-                continue
+        if len(words) > 2:
+            continue
 
-            first_word = words[0].lower()
+        if words[0].lower() in invalid_name_words:
+            continue
 
-            if first_word in invalid_name_words:
-                continue
-
-            if len(words) > 2:
-                continue
-
-            if not all(
-                re.fullmatch(
-                    r"[A-Za-z]+",
-                    word
-                )
-                for word in words
-            ):
-                continue
-
-            save_memory(
-                "personal",
-                "name",
-                name
+        if not all(
+            re.fullmatch(
+                r"[A-Za-z]+",
+                word
             )
+            for word in words
+        ):
+            continue
 
-            print(
-                f"Memory saved: name = {name}"
-            )
+        save_memory(
+            "personal",
+            "name",
+            name
+        )
 
-            return True
+        print(
+            f"Memory saved: name = {name}"
+        )
 
-    # ------------------------------------------------------
-    # NAME - HINDI / HINGLISH
-    # ------------------------------------------------------
+        return True
 
-    hindi_name_patterns = [
-        r"^mera naam (.+?) hai$",
-        r"^mera naam (.+?) h$",
-        r"^main (.+?) hoon$",
-        r"^mai (.+?) hoon$",
+    # ======================================================
+    # COLLEGE / UNIVERSITY
+    # ======================================================
+
+    education_patterns = [
+        r"^i study at (.+)$",
+        r"^i'm studying at (.+)$",
+        r"^i am studying at (.+)$",
+        r"^i go to (.+)$",
+        r"^i study in (.+)$",
+        r"^i am from (.+) university$",
+
+        r"^main (.+?) mein padhta hoon$",
+        r"^main (.+?) mein padhti hoon$",
+        r"^mai (.+?) mein padhta hoon$",
+        r"^mai (.+?) mein padhti hoon$",
     ]
 
-    for pattern in hindi_name_patterns:
+    for pattern in education_patterns:
 
         match = re.match(
             pattern,
@@ -467,49 +505,147 @@ def handle_memory(user_input: str):
             flags=re.IGNORECASE
         )
 
-        if match:
+        if not match:
+            continue
 
-            name = extract_name(
-                match.group(1)
-            ).strip()
+        college = clean_phrase(
+            match.group(1)
+        )
 
-            if not name:
-                continue
+        if not valid_memory_value(college):
+            continue
 
-            words = name.split()
+        save_memory(
+            "education",
+            "college",
+            college
+        )
 
-            if len(words) > 2:
-                continue
+        print(
+            f"Memory saved: college = {college}"
+        )
 
-            if not all(
-                re.fullmatch(
-                    r"[A-Za-z]+",
-                    word
-                )
-                for word in words
-            ):
-                continue
+        return True
 
-            save_memory(
-                "personal",
-                "name",
-                name
-            )
+    # ======================================================
+    # COURSE / DEGREE
+    # ======================================================
 
-            print(
-                f"Memory saved: name = {name}"
-            )
+    course_patterns = [
+        r"^my course is (.+)$",
+        r"^my degree is (.+)$",
+        r"^i am doing (.+)$",
+        r"^i'm doing (.+)$",
+        r"^i am studying (.+)$",
+        r"^i'm studying (.+)$",
+    ]
 
-            return True
+    for pattern in course_patterns:
 
-    # ------------------------------------------------------
-    # LIKES - ENGLISH
-    # ------------------------------------------------------
+        match = re.match(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+
+        if not match:
+            continue
+
+        course = clean_phrase(
+            match.group(1)
+        )
+
+        blocked = {
+            "this",
+            "that",
+            "it",
+            "coding",
+            "a project",
+            "something",
+            "nothing",
+        }
+
+        if course.lower() in blocked:
+            continue
+
+        if not valid_memory_value(course):
+            continue
+
+        save_memory(
+            "education",
+            "course",
+            course
+        )
+
+        print(
+            f"Memory saved: course = {course}"
+        )
+
+        return True
+
+    # ======================================================
+    # PROJECT
+    # ======================================================
+
+    project_patterns = [
+        r"^i am building (.+)$",
+        r"^i'm building (.+)$",
+
+        r"^i am making (.+)$",
+        r"^i'm making (.+)$",
+
+        r"^i am creating (.+)$",
+        r"^i'm creating (.+)$",
+
+        r"^i am developing (.+)$",
+        r"^i'm developing (.+)$",
+
+        r"^i built (.+)$",
+    ]
+
+    for pattern in project_patterns:
+
+        match = re.match(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+
+        if not match:
+            continue
+
+        project = clean_phrase(
+            match.group(1)
+        )
+
+        if not valid_memory_value(project):
+            continue
+
+        save_memory(
+            "projects",
+            "current_project",
+            project
+        )
+
+        print(
+            f"Memory saved: current_project = {project}"
+        )
+
+        return True
+
+    # ======================================================
+    # LIKES
+    # ======================================================
 
     like_patterns = [
         r"^i like (.+)$",
         r"^i really like (.+)$",
         r"^i enjoy (.+)$",
+
+        r"^mujhe (.+?) pasand hai$",
+        r"^mujhe (.+?) pasand h$",
+        r"^mujhe (.+?) bahut pasand hai$",
+        r"^mujhe (.+?) bohot pasand hai$",
     ]
 
     for pattern in like_patterns:
@@ -520,68 +656,31 @@ def handle_memory(user_input: str):
             flags=re.IGNORECASE
         )
 
-        if match:
+        if not match:
+            continue
 
-            thing = clean_memory_value(
-                match.group(1)
-            )
-
-            if thing:
-
-                save_memory(
-                    "preferences",
-                    "likes",
-                    thing
-                )
-
-                print(
-                    f"Memory saved: likes = {thing}"
-                )
-
-                return True
-
-    # ------------------------------------------------------
-    # LIKES - HINDI / HINGLISH
-    # ------------------------------------------------------
-
-    hindi_like_patterns = [
-        r"^mujhe (.+?) pasand hai$",
-        r"^mujhe (.+?) pasand h$",
-        r"^mujhe (.+?) bahut pasand hai$",
-        r"^mujhe (.+?) bohot pasand hai$",
-    ]
-
-    for pattern in hindi_like_patterns:
-
-        match = re.match(
-            pattern,
-            text,
-            flags=re.IGNORECASE
+        thing = clean_phrase(
+            match.group(1)
         )
 
-        if match:
+        if not valid_memory_value(thing):
+            continue
 
-            thing = clean_memory_value(
-                match.group(1)
-            )
+        save_memory(
+            "preferences",
+            "likes",
+            thing
+        )
 
-            if thing:
+        print(
+            f"Memory saved: likes = {thing}"
+        )
 
-                save_memory(
-                    "preferences",
-                    "likes",
-                    thing
-                )
+        return True
 
-                print(
-                    f"Memory saved: likes = {thing}"
-                )
-
-                return True
-
-    # ------------------------------------------------------
-    # LOVE - ENGLISH
-    # ------------------------------------------------------
+    # ======================================================
+    # LOVE
+    # ======================================================
 
     love_patterns = [
         r"^i love (.+)$",
@@ -596,65 +695,84 @@ def handle_memory(user_input: str):
             flags=re.IGNORECASE
         )
 
-        if match:
+        if not match:
+            continue
 
-            thing = clean_memory_value(
-                match.group(1)
-            )
-
-            if thing:
-
-                save_memory(
-                    "preferences",
-                    "loves",
-                    thing
-                )
-
-                print(
-                    f"Memory saved: loves = {thing}"
-                )
-
-                return True
-
-    # ------------------------------------------------------
-    # FAVORITES - ENGLISH
-    # ------------------------------------------------------
-
-    favorite_match = re.match(
-        r"^my favorite (.+?) is (.+)$",
-        text,
-        flags=re.IGNORECASE
-    )
-
-    if favorite_match:
-
-        category = favorite_match.group(1).strip()
-
-        value = clean_memory_value(
-            favorite_match.group(2)
+        thing = clean_phrase(
+            match.group(1)
         )
 
-        if category and value:
+        if not valid_memory_value(thing):
+            continue
 
-            save_memory(
-                "preferences",
-                f"favorite_{category.lower()}",
-                value
-            )
+        save_memory(
+            "preferences",
+            "loves",
+            thing
+        )
 
-            print(
-                f"Memory saved: favorite {category} = {value}"
-            )
+        print(
+            f"Memory saved: loves = {thing}"
+        )
 
-            return True
+        return True
 
-    # ------------------------------------------------------
-    # FAVORITES - HINGLISH
-    # ------------------------------------------------------
+    # ======================================================
+    # FAVORITES
+    # ======================================================
+
+    favorite_patterns = [
+        r"^my favorite (.+?) is (.+)$",
+        r"^my favourite (.+?) is (.+)$",
+    ]
+
+    for pattern in favorite_patterns:
+
+        match = re.match(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+
+        if not match:
+            continue
+
+        category = clean_phrase(
+            match.group(1)
+        )
+
+        value = clean_phrase(
+            match.group(2)
+        )
+
+        if not category:
+            continue
+
+        if not valid_memory_value(value):
+            continue
+
+        save_memory(
+            "preferences",
+            f"favorite_{category.lower()}",
+            value
+        )
+
+        print(
+            f"Memory saved: favorite {category} = {value}"
+        )
+
+        return True
+
+    # ======================================================
+    # HINGLISH FAVORITES
+    # ======================================================
 
     hindi_favorite_patterns = [
         r"^meri favorite (.+?) (.+?) hai$",
         r"^mera favorite (.+?) (.+?) hai$",
+
+        r"^meri favourite (.+?) (.+?) hai$",
+        r"^mera favourite (.+?) (.+?) hai$",
     ]
 
     for pattern in hindi_favorite_patterns:
@@ -665,27 +783,149 @@ def handle_memory(user_input: str):
             flags=re.IGNORECASE
         )
 
-        if match:
+        if not match:
+            continue
 
-            category = match.group(1).strip()
+        category = clean_phrase(
+            match.group(1)
+        )
 
-            value = clean_memory_value(
-                match.group(2)
+        value = clean_phrase(
+            match.group(2)
+        )
+
+        if not category:
+            continue
+
+        if not valid_memory_value(value):
+            continue
+
+        save_memory(
+            "preferences",
+            f"favorite_{category.lower()}",
+            value
+        )
+
+        print(
+            f"Memory saved: favorite {category} = {value}"
+        )
+
+        return True
+
+    # ======================================================
+    # EXPLICIT REMEMBER COMMANDS
+    # ======================================================
+
+    remember_patterns = [
+        r"^remember that (.+)$",
+        r"^remember (.+)$",
+        r"^please remember that (.+)$",
+        r"^please remember (.+)$",
+
+        r"^yaad rakhna ki (.+)$",
+        r"^yaad rakhna (.+)$",
+    ]
+
+    for pattern in remember_patterns:
+
+        match = re.match(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+
+        if not match:
+            continue
+
+        statement = clean_phrase(
+            match.group(1)
+        )
+
+        if not valid_memory_value(statement):
+            continue
+
+        lowered = statement.lower()
+
+        if "my name is " in lowered:
+
+            value = re.sub(
+                r"^my name is\s+",
+                "",
+                statement,
+                flags=re.IGNORECASE
             )
 
-            if category and value:
+            if valid_memory_value(value):
 
                 save_memory(
-                    "preferences",
-                    f"favorite_{category.lower()}",
+                    "personal",
+                    "name",
                     value
                 )
 
                 print(
-                    f"Memory saved: favorite {category} = {value}"
+                    f"Memory saved: name = {value}"
                 )
 
                 return True
+
+        if "i study at " in lowered:
+
+            value = re.sub(
+                r"^i study at\s+",
+                "",
+                statement,
+                flags=re.IGNORECASE
+            )
+
+            if valid_memory_value(value):
+
+                save_memory(
+                    "education",
+                    "college",
+                    value
+                )
+
+                print(
+                    f"Memory saved: college = {value}"
+                )
+
+                return True
+
+        if "i am building " in lowered:
+
+            value = re.sub(
+                r"^i am building\s+",
+                "",
+                statement,
+                flags=re.IGNORECASE
+            )
+
+            if valid_memory_value(value):
+
+                save_memory(
+                    "projects",
+                    "current_project",
+                    value
+                )
+
+                print(
+                    f"Memory saved: current_project = {value}"
+                )
+
+                return True
+
+        save_memory(
+            "personal",
+            "fact",
+            statement
+        )
+
+        print(
+            f"Memory saved: fact = {statement}"
+        )
+
+        return True
 
     return False
 
@@ -716,18 +956,55 @@ def is_exit_command(user_input: str) -> bool:
         "goodbye",
         "bye",
         "quit",
+
         "बंद",
         "बाय",
         "अलविदा",
     }
 
-    if normalized in exit_commands:
+    return normalized in exit_commands
+
+
+# ==========================================================
+# COMPUTER COMMAND HANDLER
+# ==========================================================
+
+async def handle_computer_command(
+    user_input: str,
+    language: str
+) -> bool:
+    """
+    Check whether the user's input is a safe computer command.
+
+    Returns:
+        True  -> command was handled
+        False -> not a computer command
+    """
+
+    intent = detect_intent(
+        user_input
+    )
+
+    if not intent.get("handled"):
+        return False
+
+    response = intent.get(
+        "response"
+    )
+
+    if not response:
         return True
 
-    if normalized.replace(" ", "") == "bye":
-        return True
+    print(
+        f"Aria: {response}"
+    )
 
-    return False
+    await speak(
+        response,
+        language=language
+    )
+
+    return True
 
 
 # ==========================================================
@@ -739,6 +1016,7 @@ async def main():
     print("=" * 50)
     print("        ARIA - AI COMPANION")
     print("=" * 50)
+
     print("Aria is ready...")
     print("Speak to her. Say 'bye' to exit.")
     print()
@@ -747,9 +1025,9 @@ async def main():
 
         try:
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # LISTEN
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             result = listen()
 
@@ -780,15 +1058,9 @@ async def main():
             print(f"Unexpected error: {e}")
             continue
 
-        # ----------------------------------------------
-        # MEMORY
-        # ----------------------------------------------
-
-        handle_memory(user_input)
-
-        # ----------------------------------------------
+        # ----------------------------------------------------
         # INPUT LANGUAGE
-        # ----------------------------------------------
+        # ----------------------------------------------------
 
         language = detect_language(
             user_input
@@ -798,9 +1070,9 @@ async def main():
             f"Language: {language}"
         )
 
-        # ----------------------------------------------
+        # ----------------------------------------------------
         # EXIT
-        # ----------------------------------------------
+        # ----------------------------------------------------
 
         if is_exit_command(user_input):
 
@@ -820,9 +1092,38 @@ async def main():
 
             break
 
-        # ----------------------------------------------
+        # ----------------------------------------------------
+        # COMPUTER COMMAND
+        # ----------------------------------------------------
+
+        computer_command_handled = (
+            await handle_computer_command(
+                user_input=user_input,
+                language=language
+            )
+        )
+
+        if computer_command_handled:
+
+            continue
+
+        # ----------------------------------------------------
+        # MEMORY
+        # ----------------------------------------------------
+
+        memory_saved = handle_memory(
+            user_input
+        )
+
+        if memory_saved:
+
+            print(
+                "Memory check: useful information detected."
+            )
+
+        # ----------------------------------------------------
         # ARIA BRAIN
-        # ----------------------------------------------
+        # ----------------------------------------------------
 
         reply = get_reply(
             user_input=user_input,
@@ -833,9 +1134,9 @@ async def main():
             f"Aria: {reply}"
         )
 
-        # ----------------------------------------------
-        # DETECT LANGUAGE OF ACTUAL ARIA RESPONSE
-        # ----------------------------------------------
+        # ----------------------------------------------------
+        # RESPONSE LANGUAGE
+        # ----------------------------------------------------
 
         if re.search(
             r"[\u0900-\u097F]",
@@ -849,9 +1150,9 @@ async def main():
             f"Aria output language: {output_language}"
         )
 
-        # ----------------------------------------------
+        # ----------------------------------------------------
         # SPEAK
-        # ----------------------------------------------
+        # ----------------------------------------------------
 
         await speak(
             reply,
