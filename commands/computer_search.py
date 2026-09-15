@@ -1,518 +1,1156 @@
 import os
+import re
 import subprocess
-from pathlib import Path
 from difflib import SequenceMatcher
+from pathlib import Path
 
+
+# ==========================================================
+# BASIC PATHS
+# ==========================================================
 
 HOME = Path.home()
 
-
-START_MENU_LOCATIONS = [
-    Path(
-        os.environ.get(
-            "ProgramData",
-            "C:\\ProgramData",
-        )
-    )
-    / "Microsoft"
-    / "Windows"
-    / "Start Menu",
-
-    HOME
-    / "AppData"
-    / "Roaming"
-    / "Microsoft"
-    / "Windows"
-    / "Start Menu",
-]
-
-
-FOLDER_SEARCH_LOCATIONS = [
+FOLDER_SEARCH_PATHS = [
     HOME / "Desktop",
     HOME / "Downloads",
     HOME / "Documents",
 ]
 
 
-IGNORED_APPLICATION_WORDS = {
-    "setup",
-    "installer",
-    "install",
-    "uninstall",
-    "manual",
-    "documentation",
-    "readme",
-    "config",
-    "share",
-    "license",
-    "help",
-    "repair",
-    "update",
+# ==========================================================
+# APPLICATION ALIASES
+# ==========================================================
+
+ALIASES = {
+
+    # ------------------------------------------------------
+    # VISUAL STUDIO CODE
+    # ------------------------------------------------------
+
+    "vscode": [
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+        "code",
+        "code.exe",
+    ],
+
+    "vs code": [
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+        "code",
+        "code.exe",
+    ],
+
+    "vs-code": [
+        "vscode",
+        "vs code",
+        "visual studio code",
+        "code",
+        "code.exe",
+    ],
+
+    "visual studio code": [
+        "vscode",
+        "vs code",
+        "visual studio code",
+        "code",
+        "code.exe",
+    ],
+
+    "code": [
+        "vscode",
+        "vs code",
+        "visual studio code",
+        "code",
+        "code.exe",
+    ],
+
+    # ------------------------------------------------------
+    # CHROME
+    # ------------------------------------------------------
+
+    "chrome": [
+        "google chrome",
+        "chrome",
+        "chrome.exe",
+    ],
+
+    "google chrome": [
+        "google chrome",
+        "chrome",
+        "chrome.exe",
+    ],
+
+    # ------------------------------------------------------
+    # EDGE
+    # ------------------------------------------------------
+
+    "edge": [
+        "microsoft edge",
+        "edge",
+        "msedge",
+        "msedge.exe",
+    ],
+
+    "microsoft edge": [
+        "microsoft edge",
+        "edge",
+        "msedge",
+        "msedge.exe",
+    ],
+
+    # ------------------------------------------------------
+    # NOTEPAD
+    # ------------------------------------------------------
+
+    "notepad": [
+        "notepad",
+        "notepad.exe",
+    ],
+
+    # ------------------------------------------------------
+    # CALCULATOR
+    # ------------------------------------------------------
+
+    "calculator": [
+        "calculator",
+        "windows calculator",
+        "calc",
+        "calc.exe",
+    ],
+
+    "calc": [
+        "calculator",
+        "windows calculator",
+        "calc",
+        "calc.exe",
+    ],
+
+    # ------------------------------------------------------
+    # FILE EXPLORER
+    # ------------------------------------------------------
+
+    "explorer": [
+        "file explorer",
+        "explorer",
+        "windows explorer",
+        "explorer.exe",
+    ],
+
+    "file explorer": [
+        "file explorer",
+        "explorer",
+        "windows explorer",
+        "explorer.exe",
+    ],
+
+    # ------------------------------------------------------
+    # TERMINAL
+    # ------------------------------------------------------
+
+    "terminal": [
+        "windows terminal",
+        "terminal",
+        "wt",
+        "wt.exe",
+    ],
+
+    # ------------------------------------------------------
+    # COMMAND PROMPT
+    # ------------------------------------------------------
+
+    "cmd": [
+        "command prompt",
+        "cmd",
+        "cmd.exe",
+    ],
+
+    "command prompt": [
+        "command prompt",
+        "cmd",
+        "cmd.exe",
+    ],
+
+    # ------------------------------------------------------
+    # POWERSHELL
+    # ------------------------------------------------------
+
+    "powershell": [
+        "powershell",
+        "windows powershell",
+        "powershell.exe",
+    ],
+
+    "windows powershell": [
+        "powershell",
+        "windows powershell",
+        "powershell.exe",
+    ],
 }
 
 
-def normalize_text(text: str) -> str:
-    """
-    Normalize text so application names can be
-    compared more reliably.
-    """
+# ==========================================================
+# NORMALIZE TEXT
+# ==========================================================
+
+def normalize_text(text):
 
     if not text:
         return ""
 
-    text = text.lower().strip()
+    text = str(text).lower().strip()
 
-    replacements = {
-        "-": " ",
-        "_": " ",
-        "(": " ",
-        ")": " ",
-        "[": " ",
-        "]": " ",
-        ".": " ",
-    }
+    text = text.replace("_", " ")
+    text = text.replace("-", " ")
 
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+    text = re.sub(
+        r"\.(exe|lnk|url)$",
+        "",
+        text
+    )
 
-    return " ".join(text.split())
+    text = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        text
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    text = text.strip()
+
+    # ------------------------------------------------------
+    # Normalize common VS Code speech variations
+    # ------------------------------------------------------
+
+    compact = text.replace(
+        " ",
+        ""
+    )
+
+    if compact in {
+        "vscode",
+        "vscode",
+        "visualstudiocode",
+    }:
+        return "vscode"
+
+    return text
 
 
-def similarity(query: str, name: str) -> float:
-    """
-    Calculate relevance between a search query
-    and an application or folder name.
-    """
+# ==========================================================
+# SIMILARITY
+# ==========================================================
 
-    query = normalize_text(query)
-    name = normalize_text(name)
+def similarity(a, b):
 
-    if not query or not name:
+    a = normalize_text(a)
+    b = normalize_text(b)
+
+    if not a or not b:
         return 0.0
 
-    # Exact name match.
-    if query == name:
+    if a == b:
         return 1.0
 
-    query_words = query.split()
-    name_words = name.split()
+    if a in b or b in a:
+        return 0.95
 
-    # Count complete word matches.
-    matched_words = 0
-
-    for word in query_words:
-        if word in name_words:
-            matched_words += 1
-
-    if query_words:
-        word_score = matched_words / len(query_words)
-    else:
-        word_score = 0.0
-
-    # Complete query appears inside the name.
-    if query in name:
-        phrase_score = 0.95
-    else:
-        phrase_score = 0.0
-
-    # Fuzzy similarity.
-    fuzzy_score = SequenceMatcher(
+    return SequenceMatcher(
         None,
-        query,
-        name,
+        a,
+        b
     ).ratio()
 
-    fuzzy_score *= 0.75
 
-    return max(
-        word_score,
-        phrase_score,
-        fuzzy_score,
+# ==========================================================
+# GET ALIASES
+# ==========================================================
+
+def get_aliases(query):
+
+    query = normalize_text(
+        query
     )
 
+    aliases = [
+        query
+    ]
 
-def is_ignored_application_name(
-    name: str,
-) -> bool:
-    """
-    Ignore installers, uninstallers, manuals
-    and other non-useful application entries.
-    """
+    if query in ALIASES:
 
-    normalized = normalize_text(name)
+        aliases.extend(
+            ALIASES[query]
+        )
 
-    words = set(
-        normalized.split()
-    )
+    for key, values in ALIASES.items():
 
-    for ignored_word in IGNORED_APPLICATION_WORDS:
+        if query == normalize_text(key):
 
-        if ignored_word in words:
-            return True
+            aliases.extend(
+                values
+            )
 
-    return False
+    cleaned = []
+
+    for item in aliases:
+
+        item = normalize_text(
+            item
+        )
+
+        if item and item not in cleaned:
+
+            cleaned.append(item)
+
+    return cleaned
 
 
-def get_windows_applications():
-    """
-    Get applications known to Windows through
-    PowerShell Get-StartApps.
+# ==========================================================
+# WINDOWS START MENU APPLICATIONS
+# ==========================================================
 
-    This includes many Microsoft Store and
-    Windows applications that do not have normal
-    .lnk files.
-    """
+def get_start_menu_apps():
+
+    apps = []
 
     command = [
         "powershell",
         "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
         "-Command",
         (
             "Get-StartApps | "
             "ForEach-Object { "
-            "$_.Name + '|||' + $_.AppID "
+            "$_.Name + '||' + $_.AppID "
             "}"
         ),
     ]
 
     try:
 
-        process = subprocess.run(
+        result = subprocess.run(
             command,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=30,
+            timeout=15,
         )
 
-    except (
-        subprocess.SubprocessError,
-        OSError,
-    ):
-        return []
+        if result.returncode != 0:
 
-    if process.returncode != 0:
-        return []
+            return apps
+
+        for line in result.stdout.splitlines():
+
+            if "||" not in line:
+
+                continue
+
+            name, app_id = line.split(
+                "||",
+                1
+            )
+
+            name = name.strip()
+            app_id = app_id.strip()
+
+            if not name or not app_id:
+
+                continue
+
+            apps.append(
+                {
+                    "name": name,
+                    "app_id": app_id,
+                    "type": "start_menu",
+                }
+            )
+
+    except Exception as error:
+
+        print(
+            "Start Menu discovery error:",
+            error
+        )
+
+    return apps
+
+
+# ==========================================================
+# FIND EXECUTABLE ON PATH
+# ==========================================================
+
+def find_executable_on_path(name):
+
+    names = [
+        name
+    ]
+
+    if not name.lower().endswith(
+        ".exe"
+    ):
+
+        names.append(
+            name + ".exe"
+        )
+
+    for candidate in names:
+
+        try:
+
+            result = subprocess.run(
+                [
+                    "where",
+                    candidate
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+
+                paths = (
+                    result.stdout
+                    .strip()
+                    .splitlines()
+                )
+
+                if paths:
+
+                    return paths[0].strip()
+
+        except Exception:
+
+            pass
+
+    return None
+
+
+# ==========================================================
+# SPECIAL VS CODE DETECTION
+# ==========================================================
+
+def find_vscode():
+
+    possible_paths = []
+
+    # ------------------------------------------------------
+    # PATH / CODE COMMAND
+    # ------------------------------------------------------
+
+    code_path = find_executable_on_path(
+        "code"
+    )
+
+    if code_path:
+
+        possible_paths.append(
+            code_path
+        )
+
+    # ------------------------------------------------------
+    # USER INSTALLATION
+    # ------------------------------------------------------
+
+    local_app_data = os.environ.get(
+        "LOCALAPPDATA",
+        ""
+    )
+
+    if local_app_data:
+
+        possible_paths.extend(
+            [
+                os.path.join(
+                    local_app_data,
+                    "Programs",
+                    "Microsoft VS Code",
+                    "Code.exe",
+                ),
+
+                os.path.join(
+                    local_app_data,
+                    "Programs",
+                    "Microsoft VS Code",
+                    "bin",
+                    "code.cmd",
+                ),
+            ]
+        )
+
+    # ------------------------------------------------------
+    # SYSTEM INSTALLATION
+    # ------------------------------------------------------
+
+    program_files = os.environ.get(
+        "PROGRAMFILES",
+        ""
+    )
+
+    if program_files:
+
+        possible_paths.append(
+            os.path.join(
+                program_files,
+                "Microsoft VS Code",
+                "Code.exe",
+            )
+        )
+
+    program_files_x86 = os.environ.get(
+        "PROGRAMFILES(X86)",
+        ""
+    )
+
+    if program_files_x86:
+
+        possible_paths.append(
+            os.path.join(
+                program_files_x86,
+                "Microsoft VS Code",
+                "Code.exe",
+            )
+        )
+
+    # ------------------------------------------------------
+    # RETURN FIRST VALID PATH
+    # ------------------------------------------------------
+
+    checked = []
+
+    for path in possible_paths:
+
+        if not path:
+
+            continue
+
+        normalized = os.path.normpath(
+            path
+        ).lower()
+
+        if normalized in checked:
+
+            continue
+
+        checked.append(
+            normalized
+        )
+
+        if os.path.exists(path):
+
+            return path
+
+    return None
+
+
+# ==========================================================
+# FIND COMMON APPLICATION PATHS
+# ==========================================================
+
+def find_common_application_paths(
+    query
+):
+
+    aliases = get_aliases(
+        query
+    )
 
     results = []
 
-    for line in process.stdout.splitlines():
+    # ------------------------------------------------------
+    # SPECIAL CASE: VS CODE
+    # ------------------------------------------------------
 
-        line = line.strip()
+    normalized_query = normalize_text(
+        query
+    )
 
-        if not line:
+    if normalized_query == "vscode":
+
+        vscode_path = find_vscode()
+
+        if vscode_path:
+
+            results.append(
+                {
+                    "name": "Visual Studio Code",
+                    "path": vscode_path,
+                    "type": "vscode",
+                    "score": 1.0,
+                }
+            )
+
+    # ------------------------------------------------------
+    # NORMAL APPLICATION PATHS
+    # ------------------------------------------------------
+
+    roots = [
+        Path(
+            os.environ.get(
+                "LOCALAPPDATA",
+                ""
+            )
+        ) / "Programs",
+
+        Path(
+            os.environ.get(
+                "PROGRAMFILES",
+                ""
+            )
+        ),
+
+        Path(
+            os.environ.get(
+                "PROGRAMFILES(X86)",
+                ""
+            )
+        ),
+    ]
+
+    for root in roots:
+
+        if not root.exists():
+
             continue
 
-        if "|||" not in line:
-            continue
+        for alias in aliases:
 
-        name, app_id = line.split(
-            "|||",
-            1,
-        )
+            normalized_alias = normalize_text(
+                alias
+            )
 
-        name = name.strip()
-        app_id = app_id.strip()
+            if not normalized_alias:
 
-        if not name or not app_id:
-            continue
+                continue
 
-        if is_ignored_application_name(
-            name
-        ):
-            continue
+            try:
 
-        results.append(
-            {
-                "name": name,
-                "path": app_id,
-                "app_id": app_id,
-                "score": 0.0,
-                "type": "windows_application",
-            }
-        )
+                for path in root.glob(
+                    "**/*.exe"
+                ):
+
+                    name = normalize_text(
+                        path.stem
+                    )
+
+                    if (
+                        normalized_alias == name
+                        or normalized_alias in name
+                        or name in normalized_alias
+                    ):
+
+                        results.append(
+                            {
+                                "name": path.stem,
+                                "path": str(path),
+                                "type": "executable",
+                                "score": similarity(
+                                    normalized_alias,
+                                    name
+                                ),
+                            }
+                        )
+
+            except Exception:
+
+                continue
 
     return results
 
 
-def search_start_menu_applications(
-    query: str,
-):
-    """
-    Search normal Windows Start Menu
-    application shortcuts.
-    """
+# ==========================================================
+# SEARCH APPLICATIONS
+# ==========================================================
+
+def search_applications(query):
+
+    original_query = query
+
+    query = normalize_text(
+        query
+    )
+
+    if not query:
+
+        return []
 
     results = []
 
-    for location in START_MENU_LOCATIONS:
+    # ------------------------------------------------------
+    # SPECIAL VS CODE HANDLING
+    # ------------------------------------------------------
 
-        if not location.exists():
+    if query == "vscode":
+
+        vscode_path = find_vscode()
+
+        if vscode_path:
+
+            results.append(
+                {
+                    "name": "Visual Studio Code",
+                    "path": vscode_path,
+                    "type": "vscode",
+                    "score": 1.0,
+                }
+            )
+
+    # ------------------------------------------------------
+    # ALIASES
+    # ------------------------------------------------------
+
+    aliases = get_aliases(
+        original_query
+    )
+
+    # ------------------------------------------------------
+    # START MENU
+    # ------------------------------------------------------
+
+    apps = get_start_menu_apps()
+
+    for app in apps:
+
+        app_name = normalize_text(
+            app["name"]
+        )
+
+        score = 0
+
+        for alias in aliases:
+
+            score = max(
+                score,
+                similarity(
+                    alias,
+                    app_name
+                )
+            )
+
+        # --------------------------------------------------
+        # Extra VS Code matching
+        # --------------------------------------------------
+
+        if query == "vscode":
+
+            if (
+                "visual studio code"
+                in app_name
+                or app_name == "code"
+                or "vs code"
+                in app_name
+            ):
+
+                score = 1.0
+
+        if score >= 0.60:
+
+            result = dict(app)
+
+            result["score"] = score
+
+            results.append(
+                result
+            )
+
+    # ------------------------------------------------------
+    # PATH EXECUTABLE
+    # ------------------------------------------------------
+
+    executable = find_executable_on_path(
+        query
+    )
+
+    if executable:
+
+        results.append(
+            {
+                "name": Path(
+                    executable
+                ).stem,
+
+                "path": executable,
+
+                "type": "path",
+
+                "score": 1.0,
+            }
+        )
+
+    # ------------------------------------------------------
+    # COMMON INSTALLATION PATHS
+    # ------------------------------------------------------
+
+    results.extend(
+        find_common_application_paths(
+            original_query
+        )
+    )
+
+    # ------------------------------------------------------
+    # REMOVE DUPLICATES
+    # ------------------------------------------------------
+
+    unique = {}
+
+    for result in results:
+
+        identifier = (
+            result.get("app_id")
+            or result.get("path")
+            or result.get("name")
+        )
+
+        identifier = str(
+            identifier
+        ).lower()
+
+        if identifier not in unique:
+
+            unique[
+                identifier
+            ] = result
+
+        else:
+
+            existing = unique[
+                identifier
+            ]
+
+            if (
+                result.get("score", 0)
+                >
+                existing.get("score", 0)
+            ):
+
+                unique[
+                    identifier
+                ] = result
+
+    results = list(
+        unique.values()
+    )
+
+    # ------------------------------------------------------
+    # SORT
+    # ------------------------------------------------------
+
+    results.sort(
+        key=lambda item: item.get(
+            "score",
+            0
+        ),
+        reverse=True
+    )
+
+    return results
+
+
+# ==========================================================
+# OPEN APPLICATION
+# ==========================================================
+
+def open_application(query):
+
+    results = search_applications(
+        query
+    )
+
+    if not results:
+
+        return {
+            "success": False,
+            "response": (
+                f"I couldn't find {query} "
+                "on your computer."
+            ),
+        }
+
+    best = results[0]
+
+    # ------------------------------------------------------
+    # VS CODE
+    # ------------------------------------------------------
+
+    if best.get("type") == "vscode":
+
+        path = best.get(
+            "path"
+        )
+
+        if path and os.path.exists(path):
+
+            try:
+
+                subprocess.Popen(
+                    [
+                        path
+                    ],
+                    shell=False
+                )
+
+                return {
+                    "success": True,
+                    "name": "Visual Studio Code",
+                    "response": (
+                        "Opening Visual Studio Code."
+                    ),
+                }
+
+            except Exception as error:
+
+                print(
+                    "VS Code launch error:",
+                    error
+                )
+
+    # ------------------------------------------------------
+    # START MENU APPLICATION
+    # ------------------------------------------------------
+
+    if best.get("type") == "start_menu":
+
+        app_id = best.get(
+            "app_id"
+        )
+
+        if app_id:
+
+            try:
+
+                subprocess.Popen(
+                    [
+                        "explorer.exe",
+                        f"shell:AppsFolder\\{app_id}",
+                    ]
+                )
+
+                return {
+                    "success": True,
+                    "name": best["name"],
+                    "response": (
+                        f"Opening {best['name']}."
+                    ),
+                }
+
+            except Exception as error:
+
+                print(
+                    "Start Menu launch error:",
+                    error
+                )
+
+    # ------------------------------------------------------
+    # NORMAL EXECUTABLE
+    # ------------------------------------------------------
+
+    path = best.get(
+        "path"
+    )
+
+    if path and os.path.exists(path):
+
+        try:
+
+            subprocess.Popen(
+                [
+                    path
+                ],
+                shell=False
+            )
+
+            return {
+                "success": True,
+                "name": best["name"],
+                "response": (
+                    f"Opening {best['name']}."
+                ),
+            }
+
+        except Exception as error:
+
+            print(
+                "Executable launch error:",
+                error
+            )
+
+    # ------------------------------------------------------
+    # WINDOWS FALLBACK
+    # ------------------------------------------------------
+
+    try:
+
+        os.startfile(
+            best.get(
+                "path"
+            )
+            or best["name"]
+        )
+
+        return {
+            "success": True,
+            "name": best["name"],
+            "response": (
+                f"Opening {best['name']}."
+            ),
+        }
+
+    except Exception as error:
+
+        print(
+            "Application fallback error:",
+            error
+        )
+
+    return {
+        "success": False,
+        "response": (
+            f"I found {best['name']} "
+            "but couldn't open it."
+        ),
+    }
+
+
+# ==========================================================
+# FOLDER SEARCH
+# ==========================================================
+
+def search_folders(query):
+
+    query = normalize_text(
+        query
+    )
+
+    if not query:
+
+        return []
+
+    results = []
+
+    for root in FOLDER_SEARCH_PATHS:
+
+        if not root.exists():
+
             continue
 
         try:
 
-            for path in location.rglob("*"):
+            for path in root.rglob("*"):
 
-                if not path.is_file():
+                if not path.is_dir():
+
                     continue
 
-                if path.suffix.lower() not in {
-                    ".lnk",
-                    ".appref-ms",
-                }:
-                    continue
+                name = normalize_text(
+                    path.name
+                )
 
-                name = path.stem
+                if not name:
 
-                if is_ignored_application_name(
-                    name
-                ):
                     continue
 
                 score = similarity(
                     query,
-                    name,
+                    name
                 )
 
-                if score < 0.65:
-                    continue
+                if query in name:
 
-                results.append(
-                    {
-                        "name": name,
-                        "path": str(path),
-                        "score": score,
-                        "type": "application",
-                    }
-                )
+                    score = max(
+                        score,
+                        0.95
+                    )
 
-        except (
-            PermissionError,
-            OSError,
-        ):
+                if score >= 0.60:
+
+                    results.append(
+                        {
+                            "name": path.name,
+                            "path": str(path),
+                            "type": "folder",
+                            "score": score,
+                        }
+                    )
+
+        except Exception:
+
             continue
+
+    results.sort(
+        key=lambda item: item[
+            "score"
+        ],
+        reverse=True
+    )
 
     return results
 
 
-def search_applications(
-    query: str,
-    limit: int = 10,
-):
-    """
-    Search both Windows applications and
-    normal desktop applications.
-    """
+# ==========================================================
+# COMPUTER SEARCH
+# ==========================================================
 
-    if not query:
-        return []
+def search_computer(query):
 
-    query = query.strip()
-
-    results = []
-
-    # -------------------------------------------------
-    # Search Windows application database
-    # -------------------------------------------------
-
-    windows_apps = get_windows_applications()
-
-    for app in windows_apps:
-
-        score = similarity(
-            query,
-            app["name"],
-        )
-
-        if score < 0.65:
-            continue
-
-        app["score"] = score
-
-        results.append(app)
-
-    # -------------------------------------------------
-    # Search normal Start Menu shortcuts
-    # -------------------------------------------------
-
-    start_menu_apps = (
-        search_start_menu_applications(
+    application_results = (
+        search_applications(
             query
         )
     )
 
-    results.extend(
-        start_menu_apps
+    folder_results = (
+        search_folders(
+            query
+        )
     )
 
-    # -------------------------------------------------
-    # Sort by relevance
-    # -------------------------------------------------
-
-    results.sort(
-        key=lambda item: item["score"],
-        reverse=True,
-    )
-
-    # -------------------------------------------------
-    # Remove duplicate applications
-    #
-    # Example:
-    #
-    # Visual Studio Code
-    # Visual Studio Code
-    #
-    # becomes one result.
-    # -------------------------------------------------
-
-    unique_results = []
-
-    seen_names = set()
-
-    for result in results:
-
-        normalized_name = normalize_text(
-            result["name"]
-        )
-
-        if normalized_name in seen_names:
-            continue
-
-        seen_names.add(
-            normalized_name
-        )
-
-        unique_results.append(
-            result
-        )
-
-    return unique_results[:limit]
+    return {
+        "applications": application_results,
+        "folders": folder_results,
+    }
 
 
-def search_folders(
-    query: str,
-    limit: int = 10,
-):
-    """
-    Search Desktop, Downloads and Documents
-    for folders matching the query.
-    """
+# ==========================================================
+# OPEN SEARCH RESULT
+# ==========================================================
 
-    if not query:
-        return []
-
-    query = query.strip()
-
-    results = []
-
-    for location in FOLDER_SEARCH_LOCATIONS:
-
-        if not location.exists():
-            continue
-
-        try:
-
-            for path in location.rglob("*"):
-
-                if not path.is_dir():
-                    continue
-
-                name = path.name
-
-                score = similarity(
-                    query,
-                    name,
-                )
-
-                if score < 0.65:
-                    continue
-
-                results.append(
-                    {
-                        "name": name,
-                        "path": str(path),
-                        "score": score,
-                        "type": "folder",
-                    }
-                )
-
-        except (
-            PermissionError,
-            OSError,
-        ):
-            continue
-
-    results.sort(
-        key=lambda item: item["score"],
-        reverse=True,
-    )
-
-    unique_results = []
-
-    seen_paths = set()
-
-    for result in results:
-
-        path = result["path"].lower()
-
-        if path in seen_paths:
-            continue
-
-        seen_paths.add(path)
-
-        unique_results.append(
-            result
-        )
-
-    return unique_results[:limit]
-
-
-def search_computer(
-    query: str,
-    item_type: str = "application",
-):
-    """
-    General computer search.
-
-    item_type:
-        application
-        folder
-    """
-
-    if item_type == "folder":
-        return search_folders(query)
-
-    return search_applications(query)
-
-
-def open_search_result(
-    result: dict,
-) -> bool:
-    """
-    Open a result returned by the computer
-    search system.
-    """
+def open_search_result(result):
 
     if not result:
+
         return False
 
     result_type = result.get(
         "type"
     )
 
-    # -------------------------------------------------
-    # Windows application
-    # -------------------------------------------------
+    # ------------------------------------------------------
+    # START MENU
+    # ------------------------------------------------------
 
-    if result_type == "windows_application":
+    if result_type == "start_menu":
 
         app_id = result.get(
             "app_id"
         )
 
         if not app_id:
+
             return False
 
         try:
@@ -521,91 +1159,157 @@ def open_search_result(
                 [
                     "explorer.exe",
                     f"shell:AppsFolder\\{app_id}",
-                ],
-                shell=False,
+                ]
             )
 
             return True
 
-        except (
-            OSError,
-            FileNotFoundError,
-        ):
+        except Exception as error:
+
+            print(
+                "Could not open Start Menu app:",
+                error
+            )
+
             return False
 
-    # -------------------------------------------------
-    # Normal application or folder
-    # -------------------------------------------------
+    # ------------------------------------------------------
+    # PATH
+    # ------------------------------------------------------
 
     path = result.get(
         "path"
     )
 
     if not path:
+
+        return False
+
+    if not os.path.exists(path):
+
         return False
 
     try:
 
-        os.startfile(path)
+        os.startfile(
+            path
+        )
 
         return True
 
-    except (
-        OSError,
-        FileNotFoundError,
-    ):
+    except Exception as error:
+
+        print(
+            "Could not open search result:",
+            error
+        )
+
         return False
 
 
-if __name__ == "__main__":
+# ==========================================================
+# BEST APPLICATION
+# ==========================================================
 
-    print("Computer Search Test")
-    print("--------------------")
-
-    query = input(
-        "Application to search: "
-    ).strip()
+def find_best_application(query):
 
     results = search_applications(
         query
     )
 
-    print()
+    if not results:
+
+        return None
+
+    return results[0]
+
+
+# ==========================================================
+# BEST FOLDER
+# ==========================================================
+
+def find_best_folder(query):
+
+    results = search_folders(
+        query
+    )
 
     if not results:
 
+        return None
+
+    return results[0]
+
+
+# ==========================================================
+# TEST
+# ==========================================================
+
+if __name__ == "__main__":
+
+    print()
+    print("=" * 55)
+    print("       ARIA COMPUTER SEARCH TEST")
+    print("=" * 55)
+    print()
+
+    test_queries = [
+        "vscode",
+        "vs code",
+        "visual studio code",
+        "code",
+        "chrome",
+        "notepad",
+        "calculator",
+    ]
+
+    for query in test_queries:
+
+        print()
         print(
-            "No matching applications found."
+            f"Searching for: {query}"
         )
 
-    else:
-
         print(
-            "Matching applications:"
+            "-" * 45
         )
 
-        for index, result in enumerate(
-            results,
-            start=1,
-        ):
+        results = search_applications(
+            query
+        )
+
+        if not results:
 
             print(
-                f"{index}. "
-                f"{result['name']} "
-                f"({result['score']:.2f})"
+                "No application found."
             )
 
-            if result["type"] == (
-                "windows_application"
-            ):
+            continue
+
+        for result in results[:5]:
+
+            print(
+                f"Name: {result.get('name')}"
+            )
+
+            print(
+                f"Type: {result.get('type')}"
+            )
+
+            if result.get("path"):
 
                 print(
-                    f"   Windows App ID: "
-                    f"{result['app_id']}"
+                    f"Path: {result.get('path')}"
                 )
 
-            else:
+            if result.get("app_id"):
 
                 print(
-                    f"   {result['path']}"
+                    f"App ID: {result.get('app_id')}"
                 )
+
+            print(
+                f"Score: {result.get('score', 0):.2f}"
+            )
+
+            print()

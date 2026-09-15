@@ -1,776 +1,1284 @@
 import re
 
 from commands.computer_search import (
-    search_computer,
+    search_applications,
     open_search_result,
 )
 
-from core.system_control import (
-    close_application,
+from commands.chrome_control import (
+    get_chrome_profiles,
+    find_profile_by_alias,
+    open_managed_chrome_profile,
+    close_managed_chrome_profile,
 )
 
 
-# ---------------------------------------------------------
-# Pending computer selection
-# ---------------------------------------------------------
+# ============================================================
+# STATE
+# ============================================================
 
-pending_results = []
-pending_type = None
+pending_app_results = []
+pending_chrome_profiles = []
 
 
-# ---------------------------------------------------------
-# Basic text cleaning
-# ---------------------------------------------------------
+# ============================================================
+# APPLICATION ALIASES
+# ============================================================
 
-def clean_input(text: str) -> str:
+APP_ALIASES = {
+    "vscode": [
+        "visual studio code",
+        "code",
+        "vs code",
+        "vs-code",
+    ],
+
+    "vs code": [
+        "visual studio code",
+        "vscode",
+        "code",
+        "vs-code",
+    ],
+
+    "vs-code": [
+        "visual studio code",
+        "vscode",
+        "code",
+        "vs code",
+    ],
+
+    "code": [
+        "visual studio code",
+        "code",
+    ],
+
+    "visual studio code": [
+        "visual studio code",
+        "vscode",
+        "vs code",
+        "vs-code",
+        "code",
+    ],
+
+    "chrome": [
+        "google chrome",
+        "chrome",
+    ],
+
+    "google chrome": [
+        "google chrome",
+        "chrome",
+    ],
+
+    "notepad": [
+        "notepad",
+    ],
+
+    "calculator": [
+        "calculator",
+    ],
+
+    "calc": [
+        "calculator",
+    ],
+
+    "explorer": [
+        "file explorer",
+        "explorer",
+    ],
+
+    "file explorer": [
+        "file explorer",
+        "explorer",
+    ],
+}
+
+
+# ============================================================
+# NORMALIZATION
+# ============================================================
+
+def normalize(text):
+    """
+    Normalize user command text.
+    """
+
     if not text:
         return ""
 
     text = text.lower().strip()
+
+    text = text.replace("-", " ")
+    text = text.replace("_", " ")
 
     text = re.sub(
-        r"^\s*(?:aria|arya)[\s,:-]*",
-        "",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    return text.strip()
-
-
-# ---------------------------------------------------------
-# Remove command words
-# ---------------------------------------------------------
-
-def clean_target(text: str) -> str:
-    if not text:
-        return ""
-
-    text = text.strip()
-
-    patterns = [
-        r"^open\s+",
-        r"^launch\s+",
-        r"^start\s+",
-        r"^run\s+",
-        r"^go\s+to\s+",
-        r"^show\s+",
-    ]
-
-    for pattern in patterns:
-        text = re.sub(
-            pattern,
-            "",
-            text,
-            flags=re.IGNORECASE,
-        )
-
-    return text.strip()
-
-
-# ---------------------------------------------------------
-# Check whether this is an open command
-# ---------------------------------------------------------
-
-def is_open_command(text: str) -> bool:
-
-    patterns = [
-        r"^open\s+",
-        r"^launch\s+",
-        r"^start\s+",
-        r"^run\s+",
-        r"^go\s+to\s+",
-        r"^show\s+",
-    ]
-
-    for pattern in patterns:
-
-        if re.match(
-            pattern,
-            text,
-            flags=re.IGNORECASE,
-        ):
-            return True
-
-    return False
-
-
-# ---------------------------------------------------------
-# Extract number from natural language
-# ---------------------------------------------------------
-
-def extract_selection_number(
-    text: str,
-):
-    """
-    Understand selections such as:
-
-    5
-    number 5
-    option 5
-    the fifth one
-    fifth
-    fifth one
-    """
-
-    if not text:
-        return None
-
-    text = text.lower().strip()
-
-    # -----------------------------------------------------
-    # Direct numbers
-    # -----------------------------------------------------
-
-    match = re.fullmatch(
-        r"(?:number|option|choice)?\s*(\d+)",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    if match:
-
-        return int(
-            match.group(1)
-        )
-
-    # -----------------------------------------------------
-    # Ordinal words
-    # -----------------------------------------------------
-
-    ordinal_numbers = {
-        "first": 1,
-        "second": 2,
-        "third": 3,
-        "fourth": 4,
-        "fifth": 5,
-        "sixth": 6,
-        "seventh": 7,
-        "eighth": 8,
-        "ninth": 9,
-        "tenth": 10,
-    }
-
-    cleaned = re.sub(
-        r"\b(the|one|option|choice|number)\b",
+        r"\s+",
         " ",
         text,
     )
 
-    cleaned = " ".join(
-        cleaned.split()
-    )
-
-    if cleaned in ordinal_numbers:
-
-        return ordinal_numbers[
-            cleaned
-        ]
-
-    # -----------------------------------------------------
-    # Natural phrases
-    #
-    # Example:
-    #
-    # "the fifth one please"
-    # "I want the second one"
-    # -----------------------------------------------------
-
-    for word, number in ordinal_numbers.items():
-
-        if re.search(
-            rf"\b{word}\b",
-            text,
-        ):
-
-            allowed_words = {
-                "the",
-                "one",
-                "option",
-                "choice",
-                "number",
-                "please",
-                "i",
-                "want",
-                "open",
-                "select",
-                "pick",
-                "choose",
-                word,
-            }
-
-            words = set(
-                re.findall(
-                    r"[a-z]+",
-                    text,
-                )
-            )
-
-            if words.issubset(
-                allowed_words
-            ):
-
-                return number
-
-    return None
-
-
-# ---------------------------------------------------------
-# Remove conversational selection words
-# ---------------------------------------------------------
-
-def clean_selection_text(
-    text: str,
-) -> str:
-
-    text = text.lower().strip()
-
-    patterns = [
-        r"^open\s+",
-        r"^launch\s+",
-        r"^start\s+",
-        r"^run\s+",
-        r"^show\s+",
-        r"^go\s+to\s+",
-        r"^i\s+want\s+",
-        r"^i\s+choose\s+",
-        r"^i\s+pick\s+",
-        r"^choose\s+",
-        r"^pick\s+",
-        r"^select\s+",
-        r"^please\s+",
-    ]
-
-    changed = True
-
-    while changed:
-
-        changed = False
-
-        for pattern in patterns:
-
-            new_text = re.sub(
-                pattern,
-                "",
-                text,
-                flags=re.IGNORECASE,
-            )
-
-            if new_text != text:
-
-                text = new_text.strip()
-                changed = True
-
-    text = re.sub(
-        r"^the\s+",
-        "",
-        text,
-    )
-
     return text.strip()
 
 
-# ---------------------------------------------------------
-# Format multiple results
-# ---------------------------------------------------------
+# ============================================================
+# APP NAME MATCHING
+# ============================================================
 
-def build_selection_response(
-    results,
-):
+def normalized_app_name(name):
+    """
+    Normalize an application name for comparison.
+    """
 
-    lines = [
-        "I found several matches."
-    ]
+    name = normalize(name)
 
-    for index, result in enumerate(
-        results,
-        start=1,
-    ):
+    name = re.sub(
+        r"\s*\(launcher\)$",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
 
-        lines.append(
-            f"{index}. {result['name']}"
+    return name
+
+
+def is_exact_app_match(query, result):
+    """
+    Check whether a search result is an exact or alias match.
+
+    This prevents commands such as:
+
+        open vscode
+        open vs code
+        open visual studio code
+
+    from being confused with:
+
+        CodeBlocks
+        CodeBlocks Launcher
+        other applications containing 'code'
+    """
+
+    query = normalized_app_name(query)
+
+    result_name = normalized_app_name(
+        result.get("name", "")
+    )
+
+    if not query or not result_name:
+        return False
+
+    # --------------------------------------------------------
+    # Direct exact match
+    # --------------------------------------------------------
+
+    if query == result_name:
+        return True
+
+    # --------------------------------------------------------
+    # Alias match
+    # --------------------------------------------------------
+
+    aliases = APP_ALIASES.get(
+        query,
+        []
+    )
+
+    for alias in aliases:
+
+        alias = normalized_app_name(
+            alias
         )
 
-    lines.append(
-        "Which one should I open?"
+        if result_name == alias:
+            return True
+
+    # --------------------------------------------------------
+    # VS CODE SPECIAL HANDLING
+    # --------------------------------------------------------
+
+    vscode_queries = {
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+    }
+
+    if query in vscode_queries:
+
+        return result_name in {
+            "visual studio code",
+            "code",
+        }
+
+    return False
+
+
+# ============================================================
+# FIND BEST APPLICATION
+# ============================================================
+
+def find_best_app_match(query):
+    """
+    Find one strong application match.
+
+    Exact and alias matches always win over
+    fuzzy matches.
+    """
+
+    results = search_applications(
+        query
     )
 
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------
-# Match user's selection
-# ---------------------------------------------------------
-
-def select_pending_result(
-    user_input: str,
-):
-
-    global pending_results
-    global pending_type
-
-    if not pending_results:
-        return None
-
-    text = clean_input(
-        user_input
-    )
-
-    if not text:
-        return None
-
-    # -----------------------------------------------------
-    # 1. Natural number selection
-    # -----------------------------------------------------
-
-    number = extract_selection_number(
-        text
-    )
-
-    if number is not None:
-
-        if 1 <= number <= len(
-            pending_results
-        ):
-
-            result = pending_results[
-                number - 1
-            ]
-
-            pending_results = []
-            pending_type = None
-
-            return result
-
-    # -----------------------------------------------------
-    # 2. Clean conversational words
-    # -----------------------------------------------------
-
-    selection_text = (
-        clean_selection_text(text)
-    )
-
-    # -----------------------------------------------------
-    # 3. Exact name match
-    # -----------------------------------------------------
+    if not results:
+        return None, []
 
     exact_matches = []
 
-    for result in pending_results:
+    for result in results:
 
-        name = result[
-            "name"
-        ].lower().strip()
-
-        if selection_text == name:
+        if is_exact_app_match(
+            query,
+            result
+        ):
 
             exact_matches.append(
                 result
             )
 
-    if len(exact_matches) == 1:
+    # --------------------------------------------------------
+    # Exact match found
+    # --------------------------------------------------------
 
-        result = exact_matches[0]
+    if exact_matches:
 
-        pending_results = []
-        pending_type = None
+        # Prefer Start Menu application.
+        exact_matches.sort(
+            key=lambda item: (
+                0
+                if item.get("type")
+                == "start_menu"
+                else 1,
 
-        return result
-
-    # -----------------------------------------------------
-    # 4. Partial name match
-    # -----------------------------------------------------
-
-    partial_matches = []
-
-    for result in pending_results:
-
-        name = result[
-            "name"
-        ].lower().strip()
-
-        if (
-            selection_text in name
-            or name in selection_text
-        ):
-
-            partial_matches.append(
-                result
+                -item.get(
+                    "score",
+                    0
+                ),
             )
+        )
 
-    if len(partial_matches) == 1:
+        return (
+            exact_matches[0],
+            exact_matches
+        )
 
-        result = partial_matches[0]
+    # --------------------------------------------------------
+    # No exact match
+    # --------------------------------------------------------
 
-        pending_results = []
-        pending_type = None
+    good_matches = [
+        result
+        for result in results
+        if result.get(
+            "score",
+            0
+        ) >= 0.75
+    ]
 
-        return result
-
-    return None
-
-
-# ---------------------------------------------------------
-# Handle pending selection
-# ---------------------------------------------------------
-
-def handle_pending_selection(
-    user_input: str,
-):
-
-    if not pending_results:
-        return None
-
-    result = select_pending_result(
-        user_input
+    return (
+        None,
+        good_matches[:10]
     )
 
-    if not result:
+
+# ============================================================
+# CHROME HELPERS
+# ============================================================
+
+def clean_chrome_target(text):
+    """
+    Remove Chrome-related words from a command.
+    """
+
+    text = normalize(text)
+
+    replacements = [
+        "google chrome",
+        "chrome browser",
+        "chrome",
+    ]
+
+    for replacement in replacements:
+
+        text = text.replace(
+            replacement,
+            " "
+        )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    )
+
+    return text.strip()
+
+
+def get_profile_display_names():
+    """
+    Get available Chrome profile names.
+    """
+
+    profiles = get_chrome_profiles()
+
+    names = []
+
+    for profile in profiles:
+
+        name = (
+            profile.get("name")
+            or profile.get("profile_name")
+            or profile.get("alias")
+        )
+
+        if name and name not in names:
+
+            names.append(name)
+
+    return names
+
+
+# ============================================================
+# CHROME OPEN
+# ============================================================
+
+def handle_chrome_open(command):
+    """
+    Handle commands such as:
+
+        open college chrome
+        open Satyam chrome
+        open Uma chrome
+        open Hansini chrome
+    """
+
+    command_normalized = normalize(
+        command
+    )
+
+    if "chrome" not in command_normalized:
+        return None
+
+    if not command_normalized.startswith(
+        "open "
+    ):
+        return None
+
+    target = command_normalized
+
+    target = re.sub(
+        r"^open\s+",
+        "",
+        target,
+    )
+
+    target = clean_chrome_target(
+        target
+    )
+
+    # --------------------------------------------------------
+    # No profile specified
+    # --------------------------------------------------------
+
+    if not target:
+
+        profiles = get_chrome_profiles()
+
+        if not profiles:
+
+            return {
+                "handled": True,
+                "action": "chrome_profile_not_found",
+                "target": "",
+                "response": (
+                    "I couldn't find any Chrome profiles."
+                ),
+            }
+
+        if len(profiles) == 1:
+
+            profile = profiles[0]
+
+            open_managed_chrome_profile(
+                profile
+            )
+
+            return {
+                "handled": True,
+                "action": "open_chrome",
+                "target": profile.get(
+                    "name"
+                ),
+                "response": (
+                    f"Opening "
+                    f"{profile.get('name')} "
+                    "Chrome profile."
+                ),
+            }
 
         return {
             "handled": True,
-            "action": "selection_required",
-            "target": None,
-            "response": build_selection_response(
-                pending_results
+            "action": "choose_chrome_profile",
+            "response": (
+                "Which Chrome profile should I open?\n"
+                + "\n".join(
+                    f"{index + 1}. "
+                    f"{profile.get('name')}"
+                    for index, profile
+                    in enumerate(profiles)
+                )
             ),
         }
 
-    success = open_search_result(
-        result
+    # --------------------------------------------------------
+    # Specific Chrome profile
+    # --------------------------------------------------------
+
+    profile = find_profile_by_alias(
+        target
+    )
+
+    if profile:
+
+        result = open_managed_chrome_profile(
+            profile
+        )
+
+        if result:
+
+            return {
+                "handled": True,
+                "action": "open_chrome",
+                "target": profile.get(
+                    "name"
+                ),
+                "response": (
+                    f"Opening "
+                    f"{profile.get('name')} "
+                    "Chrome profile."
+                ),
+            }
+
+    available = get_profile_display_names()
+
+    return {
+        "handled": True,
+        "action": "chrome_profile_not_found",
+        "target": target,
+        "response": (
+            f"I couldn't find a Chrome profile "
+            f"named {target}. "
+            f"Available profiles are: "
+            f"{', '.join(available)}."
+        ),
+    }
+
+
+# ============================================================
+# CHROME CLOSE
+# ============================================================
+
+def handle_chrome_close(command):
+    """
+    Handle:
+
+        close college chrome
+        close Satyam chrome
+        close Uma chrome
+        close Hansini chrome
+        close chrome
+    """
+
+    command_normalized = normalize(
+        command
+    )
+
+    if "chrome" not in command_normalized:
+        return None
+
+    if not command_normalized.startswith(
+        "close "
+    ):
+        return None
+
+    target = command_normalized
+
+    target = re.sub(
+        r"^close\s+",
+        "",
+        target,
+    )
+
+    target = clean_chrome_target(
+        target
+    )
+
+    # --------------------------------------------------------
+    # Plain close chrome
+    # --------------------------------------------------------
+
+    if not target:
+
+        profiles = get_chrome_profiles()
+
+        if not profiles:
+
+            return {
+                "handled": True,
+                "action": "chrome_not_found",
+                "response": (
+                    "I couldn't find any Chrome profiles."
+                ),
+            }
+
+        if len(profiles) == 1:
+
+            profile = profiles[0]
+
+            success = close_managed_chrome_profile(
+                profile.get("name")
+            )
+
+            if success:
+
+                return {
+                    "handled": True,
+                    "action": "close_chrome",
+                    "target": profile.get(
+                        "name"
+                    ),
+                    "response": (
+                        f"Closed "
+                        f"{profile.get('name')} "
+                        "Chrome."
+                    ),
+                }
+
+            return {
+                "handled": True,
+                "action": "chrome_close_failed",
+                "target": profile.get(
+                    "name"
+                ),
+                "response": (
+                    f"I couldn't close "
+                    f"{profile.get('name')} "
+                    "Chrome."
+                ),
+            }
+
+        return {
+            "handled": True,
+            "action": "choose_chrome_profile_to_close",
+            "response": (
+                "Which Chrome profile should I close?\n"
+                + "\n".join(
+                    f"{index + 1}. "
+                    f"{profile.get('name')}"
+                    for index, profile
+                    in enumerate(profiles)
+                )
+            ),
+        }
+
+    # --------------------------------------------------------
+    # Specific profile
+    # --------------------------------------------------------
+
+    profile = find_profile_by_alias(
+        target
+    )
+
+    if not profile:
+
+        available = get_profile_display_names()
+
+        return {
+            "handled": True,
+            "action": "chrome_profile_not_found",
+            "target": target,
+            "response": (
+                f"I couldn't find a Chrome profile "
+                f"named {target}. "
+                f"Available profiles are: "
+                f"{', '.join(available)}."
+            ),
+        }
+
+    profile_name = profile.get(
+        "name"
+    )
+
+    success = close_managed_chrome_profile(
+        profile_name
     )
 
     if success:
 
         return {
             "handled": True,
-            "action": "open_selected",
-            "target": result["name"],
+            "action": "close_chrome",
+            "target": profile_name,
+            "response": (
+                f"Closed {profile_name} Chrome."
+            ),
+        }
+
+    return {
+        "handled": True,
+        "action": "chrome_close_failed",
+        "target": profile_name,
+        "response": (
+            f"I couldn't close "
+            f"{profile_name} Chrome."
+        ),
+    }
+
+
+# ============================================================
+# PENDING CHROME SELECTION
+# ============================================================
+
+def handle_pending_chrome_selection(command):
+    """
+    Handle selection after Aria asks which Chrome
+    profile should be opened.
+    """
+
+    global pending_chrome_profiles
+
+    if not pending_chrome_profiles:
+        return None
+
+    text = normalize(
+        command
+    )
+
+    selected = None
+
+    # --------------------------------------------------------
+    # Number selection
+    # --------------------------------------------------------
+
+    number_match = re.fullmatch(
+        r"\d+",
+        text,
+    )
+
+    if number_match:
+
+        index = int(
+            number_match.group()
+        ) - 1
+
+        if (
+            0 <= index
+            < len(pending_chrome_profiles)
+        ):
+
+            selected = (
+                pending_chrome_profiles[
+                    index
+                ]
+            )
+
+    # --------------------------------------------------------
+    # Name selection
+    # --------------------------------------------------------
+
+    if selected is None:
+
+        for profile in pending_chrome_profiles:
+
+            name = normalize(
+                profile.get(
+                    "name",
+                    ""
+                )
+            )
+
+            if text == name:
+
+                selected = profile
+                break
+
+    if selected is None:
+
+        return {
+            "handled": True,
+            "action": "invalid_chrome_selection",
+            "response": (
+                "I couldn't match that Chrome profile."
+            ),
+        }
+
+    pending_chrome_profiles = []
+
+    return {
+        "handled": True,
+        "action": "chrome_selection",
+        "target": selected.get(
+            "name"
+        ),
+        "profile": selected,
+    }
+
+
+# ============================================================
+# PENDING APP SELECTION
+# ============================================================
+
+def handle_pending_app_selection(command):
+    """
+    Handle numeric application selection.
+    """
+
+    global pending_app_results
+
+    if not pending_app_results:
+        return None
+
+    text = normalize(
+        command
+    )
+
+    if not re.fullmatch(
+        r"\d+",
+        text
+    ):
+        return None
+
+    index = int(text) - 1
+
+    if not (
+        0 <= index
+        < len(pending_app_results)
+    ):
+
+        return {
+            "handled": True,
+            "action": "invalid_app_selection",
+            "response": (
+                "That application number is not valid."
+            ),
+        }
+
+    selected = pending_app_results[
+        index
+    ]
+
+    pending_app_results = []
+
+    success = open_search_result(
+        selected
+    )
+
+    if success:
+
+        return {
+            "handled": True,
+            "action": "open",
+            "target": selected.get(
+                "name"
+            ),
             "response": (
                 f"Opening "
-                f"{result['name']}."
+                f"{selected.get('name')}."
             ),
         }
 
     return {
         "handled": True,
         "action": "open_failed",
-        "target": result["name"],
+        "target": selected.get(
+            "name"
+        ),
         "response": (
             f"I found "
-            f"{result['name']} "
-            f"but I couldn't open it."
+            f"{selected.get('name')} "
+            "but couldn't open it."
         ),
     }
 
 
-# ---------------------------------------------------------
-# Dynamic application closing
-# ---------------------------------------------------------
+# ============================================================
+# NORMAL APPLICATION OPEN
+# ============================================================
 
-def handle_dynamic_close(
-    user_input: str,
-):
+def handle_application_open(command):
+    """
+    Handle normal application opening.
 
-    text = clean_input(
-        user_input
+    Examples:
+
+        open vscode
+        open vs code
+        open vs-code
+        open visual studio code
+        open notepad
+        open calculator
+    """
+
+    text = normalize(
+        command
     )
 
-    if not text:
-        return None
-
-    patterns = [
-        r"^close\s+(.+)$",
-        r"^exit\s+(.+)$",
-        r"^quit\s+(.+)$",
-        r"^stop\s+(.+)$",
-    ]
-
-    target = None
-
-    for pattern in patterns:
-
-        match = re.match(
-            pattern,
-            text,
-            flags=re.IGNORECASE,
-        )
-
-        if match:
-
-            target = match.group(
-                1
-            ).strip()
-
-            break
-
-    if not target:
-        return None
-
-    success = close_application(
-        target
-    )
-
-    if success:
-
-        return {
-            "handled": True,
-            "action": "close_application",
-            "target": target,
-            "response": (
-                f"Closing {target}."
-            ),
-        }
-
-    return {
-        "handled": True,
-        "action": "close_failed",
-        "target": target,
-        "response": (
-            f"I couldn't find "
-            f"a running application "
-            f"matching {target}."
-        ),
-    }
-
-
-# ---------------------------------------------------------
-# Dynamic computer search
-# ---------------------------------------------------------
-
-def handle_dynamic_open(
-    user_input: str,
-):
-
-    global pending_results
-    global pending_type
-
-    text = clean_input(
-        user_input
-    )
-
-    if not text:
-        return None
-
-    if not is_open_command(
-        text
+    if not text.startswith(
+        "open "
     ):
         return None
 
-    target = clean_target(
-        text
-    )
+    target = text[5:].strip()
 
     if not target:
         return None
 
-    # -----------------------------------------------------
-    # Search applications first
-    # -----------------------------------------------------
+    # Chrome handled separately.
+    if "chrome" in target:
+        return None
 
-    results = search_computer(
-        target,
-        item_type="application",
-    )
+    # --------------------------------------------------------
+    # VS CODE DIRECT ROUTING
+    # --------------------------------------------------------
+    # This is intentionally before the general search.
+    # It guarantees that:
+    #
+    # open vscode
+    # open vs code
+    # open vs-code
+    # open visual studio code
+    #
+    # all open Visual Studio Code directly.
+    # --------------------------------------------------------
 
-    # -----------------------------------------------------
-    # If no application found,
-    # search folders
-    # -----------------------------------------------------
+    vscode_targets = {
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+    }
 
-    if not results:
+    if target in vscode_targets:
 
-        results = search_computer(
-            target,
-            item_type="folder",
+        results = search_applications(
+            "vscode"
         )
 
-        if results:
-            pending_type = "folder"
+        vscode_result = None
 
-    else:
+        for result in results:
 
-        pending_type = "application"
+            result_name = normalized_app_name(
+                result.get(
+                    "name",
+                    ""
+                )
+            )
 
-    # -----------------------------------------------------
-    # Nothing found
-    # -----------------------------------------------------
+            result_type = result.get(
+                "type"
+            )
 
-    if not results:
+            if (
+                result_type == "vscode"
+                and result_name
+                == "visual studio code"
+            ):
 
-        pending_results = []
-        pending_type = None
+                vscode_result = result
+                break
+
+        # Fallback to executable result.
+        if vscode_result is None:
+
+            for result in results:
+
+                result_name = normalized_app_name(
+                    result.get(
+                        "name",
+                        ""
+                    )
+                )
+
+                if result_name == "code":
+
+                    vscode_result = result
+                    break
+
+        if vscode_result:
+
+            success = open_search_result(
+                vscode_result
+            )
+
+            if success:
+
+                return {
+                    "handled": True,
+                    "action": "open",
+                    "target": "Visual Studio Code",
+                    "response": (
+                        "Opening Visual Studio Code."
+                    ),
+                }
+
+            return {
+                "handled": True,
+                "action": "open_failed",
+                "target": "Visual Studio Code",
+                "response": (
+                    "I found Visual Studio Code "
+                    "but couldn't open it."
+                ),
+            }
 
         return {
             "handled": True,
             "action": "not_found",
-            "target": target,
+            "target": "Visual Studio Code",
             "response": (
-                f"I couldn't find "
-                f"{target} on your computer."
+                "I couldn't find Visual Studio Code "
+                "on your computer."
             ),
         }
 
-    # -----------------------------------------------------
-    # One result
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # NORMAL APPLICATION SEARCH
+    # --------------------------------------------------------
 
-    if len(results) == 1:
+    best, exact_matches = find_best_app_match(
+        target
+    )
 
-        result = results[0]
+    # --------------------------------------------------------
+    # Exact match
+    # --------------------------------------------------------
 
-        pending_results = []
-        pending_type = None
+    if best:
 
         success = open_search_result(
-            result
+            best
         )
 
         if success:
 
-            if result["type"] in {
-                "application",
-                "windows_application",
-            }:
-
-                action = (
-                    "open_application"
-                )
-
-            else:
-
-                action = "open_folder"
-
             return {
                 "handled": True,
-                "action": action,
-                "target": result["name"],
+                "action": "open",
+                "target": best.get(
+                    "name"
+                ),
                 "response": (
                     f"Opening "
-                    f"{result['name']}."
+                    f"{best.get('name')}."
                 ),
             }
 
         return {
             "handled": True,
             "action": "open_failed",
-            "target": result["name"],
+            "target": best.get(
+                "name"
+            ),
             "response": (
                 f"I found "
-                f"{result['name']} "
-                f"but I couldn't open it."
+                f"{best.get('name')} "
+                "but couldn't open it."
             ),
         }
 
-    # -----------------------------------------------------
-    # Multiple results
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # Genuine ambiguity
+    # --------------------------------------------------------
 
-    pending_results = results
+    if len(exact_matches) > 1:
+
+        unique = []
+        names = set()
+
+        for result in exact_matches:
+
+            name = result.get(
+                "name",
+                ""
+            )
+
+            name_key = name.lower()
+
+            if name_key not in names:
+
+                names.add(name_key)
+                unique.append(
+                    result
+                )
+
+        if len(unique) == 1:
+
+            success = open_search_result(
+                unique[0]
+            )
+
+            if success:
+
+                return {
+                    "handled": True,
+                    "action": "open",
+                    "target": unique[0].get(
+                        "name"
+                    ),
+                    "response": (
+                        f"Opening "
+                        f"{unique[0].get('name')}."
+                    ),
+                }
+
+        global pending_app_results
+
+        pending_app_results = unique
+
+        options = "\n".join(
+            f"{index + 1}. "
+            f"{item.get('name')}"
+            for index, item
+            in enumerate(unique)
+        )
+
+        return {
+            "handled": True,
+            "action": "choose_app",
+            "response": (
+                f"I found multiple matches for "
+                f"{target}:\n{options}"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # Nothing found
+    # --------------------------------------------------------
 
     return {
         "handled": True,
-        "action": "selection_required",
+        "action": "not_found",
         "target": target,
-        "response": build_selection_response(
-            results
+        "response": (
+            f"I couldn't find {target} "
+            "on your computer."
         ),
     }
 
 
-# ---------------------------------------------------------
-# Main intent detector
-# ---------------------------------------------------------
+# ============================================================
+# NORMAL APPLICATION CLOSE
+# ============================================================
 
-def detect_intent(
-    user_input: str,
-):
+def handle_application_close(command):
+    """
+    Handle normal application closing.
 
-    if not user_input:
+    Chrome is excluded because Chrome profiles
+    require special handling.
+    """
+
+    text = normalize(
+        command
+    )
+
+    if not text.startswith(
+        "close "
+    ):
+        return None
+
+    target = text[6:].strip()
+
+    if not target:
+        return None
+
+    if "chrome" in target:
+        return None
+
+    return {
+        "handled": True,
+        "action": "close",
+        "target": target,
+        "response": (
+            f"Closing {target}."
+        ),
+    }
+
+
+# ============================================================
+# MAIN INTENT DETECTOR
+# ============================================================
+
+def detect_intent(command):
+    """
+    Main intent router.
+    """
+
+    global pending_app_results
+    global pending_chrome_profiles
+
+    command = command.strip()
+
+    if not command:
 
         return {
-            "handled": False,
-            "action": None,
-            "target": None,
-            "response": None,
+            "handled": False
         }
 
-    # -----------------------------------------------------
-    # Pending selection gets priority
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # Pending Chrome selection
+    # --------------------------------------------------------
 
-    if pending_results:
+    if pending_chrome_profiles:
 
-        result = handle_pending_selection(
-            user_input
+        result = handle_pending_chrome_selection(
+            command
+        )
+
+        if result:
+
+            if (
+                result.get(
+                    "action"
+                )
+                == "chrome_selection"
+            ):
+
+                profile = result.get(
+                    "profile"
+                )
+
+                success = open_managed_chrome_profile(
+                    profile
+                )
+
+                if success:
+
+                    return {
+                        "handled": True,
+                        "action": "open_chrome",
+                        "target": profile.get(
+                            "name"
+                        ),
+                        "response": (
+                            f"Opening "
+                            f"{profile.get('name')} "
+                            "Chrome profile."
+                        ),
+                    }
+
+            return result
+
+    # --------------------------------------------------------
+    # Pending normal app selection
+    # --------------------------------------------------------
+
+    if pending_app_results:
+
+        result = handle_pending_app_selection(
+            command
         )
 
         if result:
             return result
 
-    # -----------------------------------------------------
-    # CLOSE commands
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # Chrome OPEN
+    # --------------------------------------------------------
 
-    result = handle_dynamic_close(
-        user_input
+    result = handle_chrome_open(
+        command
     )
 
     if result:
         return result
 
-    # -----------------------------------------------------
-    # OPEN commands
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # Chrome CLOSE
+    # --------------------------------------------------------
 
-    result = handle_dynamic_open(
-        user_input
+    result = handle_chrome_close(
+        command
     )
 
     if result:
         return result
 
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # Normal APP OPEN
+    # --------------------------------------------------------
+
+    result = handle_application_open(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
+    # Normal APP CLOSE
+    # --------------------------------------------------------
+
+    result = handle_application_close(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
     # Nothing handled
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     return {
-        "handled": False,
-        "action": None,
-        "target": None,
-        "response": None,
+        "handled": False
     }
 
 
-# ---------------------------------------------------------
-# Test
-# ---------------------------------------------------------
+# ============================================================
+# TEST MODE
+# ============================================================
 
 if __name__ == "__main__":
 
-    print(
-        "Aria Dynamic Intent Test"
-    )
-
-    print(
-        "------------------------"
-    )
+    print()
+    print("==========================================")
+    print(" ARIA INTENT SYSTEM TEST")
+    print("==========================================")
+    print()
 
     test_commands = [
-        "Arya open Google Chrome",
-        "Arya open Microsoft",
-        "the fifth one",
-        "Arya close Chrome",
-        "Arya open code",
-        "the first one",
+        "open vscode",
+        "open vs code",
+        "open vs-code",
+        "open visual studio code",
+        "open code",
+        "close vscode",
+        "open notepad",
+        "close notepad",
+        "open calculator",
+        "close calculator",
+        "open college chrome",
+        "open Satyam chrome",
+        "close college chrome",
+        "close Satyam chrome",
     ]
 
     for command in test_commands:
 
         print()
         print(
-            "Input:",
-            command,
+            f"> {command}"
         )
 
         result = detect_intent(
@@ -778,6 +1286,5 @@ if __name__ == "__main__":
         )
 
         print(
-            "Result:",
             result
         )

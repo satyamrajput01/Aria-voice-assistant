@@ -5,6 +5,7 @@ from core.speech_to_text import listen
 from core.text_to_speech import speak
 from core.brain import get_reply
 from core.memory import save_memory
+from core.system_control import close_application
 from commands.intent import detect_intent
 
 
@@ -185,8 +186,7 @@ def detect_language(text: str) -> str:
         "padhta", "padhti",
 
         "student",
-        "log",
-        "insaan",
+        "log", "insaan",
     }
 
     # ------------------------------------------------------
@@ -243,7 +243,7 @@ def detect_language(text: str) -> str:
             "गोइंग",
             "टुडे",
             "टुमॉरो",
-            "एवरीथिंग",
+            "एवरीthing",
             "नथिंग",
             "समथिंग",
 
@@ -974,11 +974,12 @@ async def handle_computer_command(
     language: str
 ) -> bool:
     """
-    Check whether the user's input is a safe computer command.
+    Handle safe computer commands.
 
-    Returns:
-        True  -> command was handled
-        False -> not a computer command
+    Chrome profile commands are executed by intent.py.
+
+    Normal application closing is executed here using
+    core.system_control.close_application().
     """
 
     intent = detect_intent(
@@ -988,21 +989,71 @@ async def handle_computer_command(
     if not intent.get("handled"):
         return False
 
+    action = intent.get("action")
+
+    # ======================================================
+    # NORMAL APPLICATION CLOSE
+    # ======================================================
+
+    if action == "close":
+
+        target = intent.get(
+            "target",
+            ""
+        ).strip()
+
+        if not target:
+            return False
+
+        print(
+            f"Closing application: {target}"
+        )
+
+        success = close_application(
+            target
+        )
+
+        if success:
+
+            response = (
+                f"Closed {target}."
+            )
+
+        else:
+
+            response = (
+                f"I couldn't close {target}."
+            )
+
+        print(
+            f"Aria: {response}"
+        )
+
+        await speak(
+            response,
+            language=language
+        )
+
+        return True
+
+    # ======================================================
+    # OTHER COMPUTER COMMANDS
+    # ======================================================
+
     response = intent.get(
         "response"
     )
 
-    if not response:
-        return True
+    if response:
 
-    print(
-        f"Aria: {response}"
-    )
+        print(
+            f"Aria: {response}"
+        )
 
-    await speak(
-        response,
-        language=language
-    )
+        await speak(
+            response,
+            language=language
+        )
 
     return True
 
