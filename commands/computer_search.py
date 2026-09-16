@@ -1,8 +1,11 @@
 import os
 import re
 import subprocess
+import time
 from difflib import SequenceMatcher
 from pathlib import Path
+
+import pygetwindow as gw
 
 
 # ==========================================================
@@ -16,6 +19,290 @@ FOLDER_SEARCH_PATHS = [
     HOME / "Downloads",
     HOME / "Documents",
 ]
+
+
+# ==========================================================
+# TRACKED VS CODE WINDOW
+# ==========================================================
+
+tracked_vscode_window = None
+
+
+def get_vscode_windows():
+    """
+    Return currently visible VS Code windows.
+    """
+
+    windows = []
+
+    try:
+        for window in gw.getAllWindows():
+
+            try:
+                title = window.title.strip()
+            except Exception:
+                continue
+
+            if not title:
+                continue
+
+            title_lower = title.lower()
+
+            if (
+                "visual studio code" in title_lower
+                or title_lower.endswith(" - code")
+                or title_lower.endswith(" - visual studio code")
+            ):
+                windows.append(window)
+
+    except Exception as error:
+        print(
+            "VS Code window detection error:",
+            error
+        )
+
+    return windows
+
+
+def open_tracked_vscode(path):
+    """
+    Open a NEW VS Code window and remember
+    the exact window that was created.
+    """
+
+    global tracked_vscode_window
+
+    if not path:
+        print(
+            "VS Code executable was not found."
+        )
+        return False
+
+    path = os.path.normpath(path)
+
+    # ------------------------------------------------------
+    # IMPORTANT:
+    # Only allow the real Code.exe.
+    # Never try to execute code.cmd here.
+    # ------------------------------------------------------
+
+    if not path.lower().endswith("code.exe"):
+
+        print(
+            f"Invalid VS Code executable: {path}"
+        )
+
+        return False
+
+    if not os.path.isfile(path):
+
+        print(
+            f"VS Code executable does not exist: {path}"
+        )
+
+        return False
+
+    # ------------------------------------------------------
+    # Remember existing VS Code windows
+    # ------------------------------------------------------
+
+    before_handles = set()
+
+    for window in get_vscode_windows():
+
+        try:
+            before_handles.add(
+                window._hWnd
+            )
+        except Exception:
+            pass
+
+    # ------------------------------------------------------
+    # Open a NEW VS Code window
+    # ------------------------------------------------------
+
+    try:
+
+        print(
+            "Starting new tracked VS Code window..."
+        )
+
+        print(
+            f"VS Code executable: {path}"
+        )
+
+        subprocess.Popen(
+            [
+                path,
+                "--new-window",
+            ],
+            shell=False
+        )
+
+    except Exception as error:
+
+        print(
+            "VS Code launch error:",
+            error
+        )
+
+        return False
+
+    # ------------------------------------------------------
+    # Wait for the new VS Code window
+    # ------------------------------------------------------
+
+    for _ in range(30):
+
+        time.sleep(0.5)
+
+        current_windows = get_vscode_windows()
+
+        for window in current_windows:
+
+            try:
+
+                handle = window._hWnd
+
+                if handle not in before_handles:
+
+                    tracked_vscode_window = window
+
+                    print(
+                        "VS Code window opened."
+                    )
+
+                    print(
+                        f"Tracked VS Code window: "
+                        f"{handle}"
+                    )
+
+                    print(
+                        f"Window title: "
+                        f"{window.title}"
+                    )
+
+                    return True
+
+            except Exception:
+
+                continue
+
+    # ------------------------------------------------------
+    # New window could not be identified
+    # ------------------------------------------------------
+
+    print(
+        "VS Code opened but the new window "
+        "could not be tracked."
+    )
+
+    return False
+
+
+def close_tracked_vscode():
+    """
+    Close ONLY the VS Code window that
+    Aria opened and is currently tracking.
+    """
+
+    global tracked_vscode_window
+
+    if tracked_vscode_window is None:
+
+        print(
+            "No VS Code window is currently "
+            "tracked by Aria."
+        )
+
+        return False
+
+    try:
+
+        window = tracked_vscode_window
+
+        handle = window._hWnd
+
+        print(
+            "Closing tracked VS Code window..."
+        )
+
+        print(
+            f"Window handle: {handle}"
+        )
+
+        print(
+            f"Window title: {window.title}"
+        )
+
+        # --------------------------------------------------
+        # Restore if minimized
+        # --------------------------------------------------
+
+        try:
+
+            if window.isMinimized:
+
+                window.restore()
+
+                time.sleep(0.3)
+
+        except Exception:
+
+            pass
+
+        # --------------------------------------------------
+        # Close ONLY this window
+        # --------------------------------------------------
+
+        window.close()
+
+        time.sleep(1)
+
+        # --------------------------------------------------
+        # Check whether exact window closed
+        # --------------------------------------------------
+
+        remaining_handles = set()
+
+        for current_window in get_vscode_windows():
+
+            try:
+
+                remaining_handles.add(
+                    current_window._hWnd
+                )
+
+            except Exception:
+
+                pass
+
+        if handle not in remaining_handles:
+
+            print(
+                "Tracked VS Code window "
+                "closed successfully."
+            )
+
+            tracked_vscode_window = None
+
+            return True
+
+        print(
+            "Tracked VS Code window "
+            "is still open."
+        )
+
+        return False
+
+    except Exception as error:
+
+        print(
+            "Tracked VS Code close error:",
+            error
+        )
+
+        return False
 
 
 # ==========================================================
@@ -205,8 +492,15 @@ def normalize_text(text):
 
     text = str(text).lower().strip()
 
-    text = text.replace("_", " ")
-    text = text.replace("-", " ")
+    text = text.replace(
+        "_",
+        " "
+    )
+
+    text = text.replace(
+        "-",
+        " "
+    )
 
     text = re.sub(
         r"\.(exe|lnk|url)$",
@@ -229,7 +523,7 @@ def normalize_text(text):
     text = text.strip()
 
     # ------------------------------------------------------
-    # Normalize common VS Code speech variations
+    # Normalize VS Code speech variations
     # ------------------------------------------------------
 
     compact = text.replace(
@@ -239,9 +533,9 @@ def normalize_text(text):
 
     if compact in {
         "vscode",
-        "vscode",
         "visualstudiocode",
     }:
+
         return "vscode"
 
     return text
@@ -349,13 +643,11 @@ def get_start_menu_apps():
         )
 
         if result.returncode != 0:
-
             return apps
 
         for line in result.stdout.splitlines():
 
             if "||" not in line:
-
                 continue
 
             name, app_id = line.split(
@@ -367,7 +659,6 @@ def get_start_menu_apps():
             app_id = app_id.strip()
 
             if not name or not app_id:
-
                 continue
 
             apps.append(
@@ -430,9 +721,17 @@ def find_executable_on_path(name):
                     .splitlines()
                 )
 
-                if paths:
+                for path in paths:
 
-                    return paths[0].strip()
+                    path = path.strip()
+
+                    # Only return actual EXE files.
+                    if (
+                        path.lower().endswith(".exe")
+                        and os.path.isfile(path)
+                    ):
+
+                        return path
 
         except Exception:
 
@@ -447,24 +746,10 @@ def find_executable_on_path(name):
 
 def find_vscode():
 
-    possible_paths = []
-
     # ------------------------------------------------------
-    # PATH / CODE COMMAND
-    # ------------------------------------------------------
-
-    code_path = find_executable_on_path(
-        "code"
-    )
-
-    if code_path:
-
-        possible_paths.append(
-            code_path
-        )
-
-    # ------------------------------------------------------
-    # USER INSTALLATION
+    # IMPORTANT:
+    # Do NOT trust "where code" first because Windows may
+    # return code.cmd from the VS Code bin folder.
     # ------------------------------------------------------
 
     local_app_data = os.environ.get(
@@ -472,35 +757,36 @@ def find_vscode():
         ""
     )
 
-    if local_app_data:
-
-        possible_paths.extend(
-            [
-                os.path.join(
-                    local_app_data,
-                    "Programs",
-                    "Microsoft VS Code",
-                    "Code.exe",
-                ),
-
-                os.path.join(
-                    local_app_data,
-                    "Programs",
-                    "Microsoft VS Code",
-                    "bin",
-                    "code.cmd",
-                ),
-            ]
-        )
-
-    # ------------------------------------------------------
-    # SYSTEM INSTALLATION
-    # ------------------------------------------------------
-
     program_files = os.environ.get(
         "PROGRAMFILES",
         ""
     )
+
+    program_files_x86 = os.environ.get(
+        "PROGRAMFILES(X86)",
+        ""
+    )
+
+    possible_paths = []
+
+    # ------------------------------------------------------
+    # 1. USER INSTALLATION
+    # ------------------------------------------------------
+
+    if local_app_data:
+
+        possible_paths.append(
+            os.path.join(
+                local_app_data,
+                "Programs",
+                "Microsoft VS Code",
+                "Code.exe",
+            )
+        )
+
+    # ------------------------------------------------------
+    # 2. SYSTEM INSTALLATION
+    # ------------------------------------------------------
 
     if program_files:
 
@@ -512,10 +798,9 @@ def find_vscode():
             )
         )
 
-    program_files_x86 = os.environ.get(
-        "PROGRAMFILES(X86)",
-        ""
-    )
+    # ------------------------------------------------------
+    # 3. 32-BIT INSTALLATION
+    # ------------------------------------------------------
 
     if program_files_x86:
 
@@ -528,15 +813,14 @@ def find_vscode():
         )
 
     # ------------------------------------------------------
-    # RETURN FIRST VALID PATH
+    # Check known locations
     # ------------------------------------------------------
 
-    checked = []
+    checked = set()
 
     for path in possible_paths:
 
         if not path:
-
             continue
 
         normalized = os.path.normpath(
@@ -544,16 +828,30 @@ def find_vscode():
         ).lower()
 
         if normalized in checked:
-
             continue
 
-        checked.append(
+        checked.add(
             normalized
         )
 
-        if os.path.exists(path):
+        if (
+            path.lower().endswith("code.exe")
+            and os.path.isfile(path)
+        ):
 
             return path
+
+    # ------------------------------------------------------
+    # 4. PATH FALLBACK
+    # ------------------------------------------------------
+
+    code_path = find_executable_on_path(
+        "Code.exe"
+    )
+
+    if code_path:
+
+        return code_path
 
     return None
 
@@ -562,9 +860,7 @@ def find_vscode():
 # FIND COMMON APPLICATION PATHS
 # ==========================================================
 
-def find_common_application_paths(
-    query
-):
+def find_common_application_paths(query):
 
     aliases = get_aliases(
         query
@@ -572,13 +868,13 @@ def find_common_application_paths(
 
     results = []
 
-    # ------------------------------------------------------
-    # SPECIAL CASE: VS CODE
-    # ------------------------------------------------------
-
     normalized_query = normalize_text(
         query
     )
+
+    # ------------------------------------------------------
+    # SPECIAL CASE: VS CODE
+    # ------------------------------------------------------
 
     if normalized_query == "vscode":
 
@@ -599,33 +895,41 @@ def find_common_application_paths(
     # NORMAL APPLICATION PATHS
     # ------------------------------------------------------
 
-    roots = [
-        Path(
-            os.environ.get(
-                "LOCALAPPDATA",
-                ""
-            )
-        ) / "Programs",
+    roots = []
 
-        Path(
-            os.environ.get(
-                "PROGRAMFILES",
-                ""
-            )
-        ),
+    local_appdata = os.environ.get(
+        "LOCALAPPDATA",
+        ""
+    )
 
-        Path(
-            os.environ.get(
-                "PROGRAMFILES(X86)",
-                ""
-            )
-        ),
-    ]
+    program_files = os.environ.get(
+        "PROGRAMFILES",
+        ""
+    )
+
+    program_files_x86 = os.environ.get(
+        "PROGRAMFILES(X86)",
+        ""
+    )
+
+    if local_appdata:
+        roots.append(
+            Path(local_appdata) / "Programs"
+        )
+
+    if program_files:
+        roots.append(
+            Path(program_files)
+        )
+
+    if program_files_x86:
+        roots.append(
+            Path(program_files_x86)
+        )
 
     for root in roots:
 
         if not root.exists():
-
             continue
 
         for alias in aliases:
@@ -635,7 +939,6 @@ def find_common_application_paths(
             )
 
             if not normalized_alias:
-
                 continue
 
             try:
@@ -686,7 +989,6 @@ def search_applications(query):
     )
 
     if not query:
-
         return []
 
     results = []
@@ -895,14 +1197,11 @@ def open_application(query):
 
         if path and os.path.exists(path):
 
-            try:
+            success = open_tracked_vscode(
+                path
+            )
 
-                subprocess.Popen(
-                    [
-                        path
-                    ],
-                    shell=False
-                )
+            if success:
 
                 return {
                     "success": True,
@@ -912,12 +1211,13 @@ def open_application(query):
                     ),
                 }
 
-            except Exception as error:
-
-                print(
-                    "VS Code launch error:",
-                    error
-                )
+            return {
+                "success": False,
+                "response": (
+                    "I found Visual Studio Code "
+                    "but couldn't track its window."
+                ),
+            }
 
     # ------------------------------------------------------
     # START MENU APPLICATION
@@ -1037,7 +1337,6 @@ def search_folders(query):
     )
 
     if not query:
-
         return []
 
     results = []
@@ -1045,7 +1344,6 @@ def search_folders(query):
     for root in FOLDER_SEARCH_PATHS:
 
         if not root.exists():
-
             continue
 
         try:
@@ -1053,7 +1351,6 @@ def search_folders(query):
             for path in root.rglob("*"):
 
                 if not path.is_dir():
-
                     continue
 
                 name = normalize_text(
@@ -1061,7 +1358,6 @@ def search_folders(query):
                 )
 
                 if not name:
-
                     continue
 
                 score = similarity(
@@ -1132,12 +1428,28 @@ def search_computer(query):
 def open_search_result(result):
 
     if not result:
-
         return False
 
     result_type = result.get(
         "type"
     )
+
+    # ------------------------------------------------------
+    # VISUAL STUDIO CODE
+    # ------------------------------------------------------
+
+    if result_type == "vscode":
+
+        path = result.get(
+            "path"
+        )
+
+        if not path:
+            return False
+
+        return open_tracked_vscode(
+            path
+        )
 
     # ------------------------------------------------------
     # START MENU
@@ -1150,7 +1462,6 @@ def open_search_result(result):
         )
 
         if not app_id:
-
             return False
 
         try:
@@ -1174,7 +1485,7 @@ def open_search_result(result):
             return False
 
     # ------------------------------------------------------
-    # PATH
+    # PATH / EXECUTABLE
     # ------------------------------------------------------
 
     path = result.get(
@@ -1182,11 +1493,9 @@ def open_search_result(result):
     )
 
     if not path:
-
         return False
 
     if not os.path.exists(path):
-
         return False
 
     try:
@@ -1218,7 +1527,6 @@ def find_best_application(query):
     )
 
     if not results:
-
         return None
 
     return results[0]
@@ -1235,7 +1543,6 @@ def find_best_folder(query):
     )
 
     if not results:
-
         return None
 
     return results[0]
@@ -1251,6 +1558,16 @@ if __name__ == "__main__":
     print("=" * 55)
     print("       ARIA COMPUTER SEARCH TEST")
     print("=" * 55)
+    print()
+
+    print(
+        "VS Code executable:"
+    )
+
+    print(
+        find_vscode()
+    )
+
     print()
 
     test_queries = [

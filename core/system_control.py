@@ -3,6 +3,12 @@ import subprocess
 import webbrowser
 from pathlib import Path
 
+from commands.computer_search import (
+    open_tracked_vscode,
+    close_tracked_vscode,
+    find_vscode,
+)
+
 
 HOME = Path.home()
 
@@ -11,17 +17,68 @@ DOCUMENTS = HOME / "Documents"
 DESKTOP = HOME / "Desktop"
 
 
-# --------------------------------------------------
+# ==========================================================
 # OPEN APPLICATION
-# --------------------------------------------------
+# ==========================================================
 
 def open_application(application: str) -> bool:
+
     if not application:
         return False
 
     application = application.lower().strip()
 
+    # ------------------------------------------------------
+    # VS CODE
+    # ------------------------------------------------------
+
+    vscode_names = {
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+        "code",
+    }
+
+    if application in vscode_names:
+
+        vscode_path = find_vscode()
+
+        if not vscode_path:
+
+            print(
+                "Visual Studio Code executable "
+                "was not found."
+            )
+
+            return False
+
+        success = open_tracked_vscode(
+            vscode_path
+        )
+
+        if success:
+
+            print(
+                "Opened and tracked "
+                "Visual Studio Code."
+            )
+
+            return True
+
+        print(
+            "VS Code opened but could not "
+            "be tracked."
+        )
+
+        return False
+
+    # ------------------------------------------------------
+    # OTHER APPLICATIONS
+    # ------------------------------------------------------
+
     applications = {
+
         "chrome": [
             "cmd",
             "/c",
@@ -29,6 +86,7 @@ def open_application(application: str) -> bool:
             "",
             "chrome",
         ],
+
         "google chrome": [
             "cmd",
             "/c",
@@ -36,6 +94,7 @@ def open_application(application: str) -> bool:
             "",
             "chrome",
         ],
+
         "chrome browser": [
             "cmd",
             "/c",
@@ -43,40 +102,34 @@ def open_application(application: str) -> bool:
             "",
             "chrome",
         ],
-        "vscode": [
-            "cmd",
-            "/c",
-            "start",
-            "",
-            "code",
-        ],
-        "visual studio code": [
-            "cmd",
-            "/c",
-            "start",
-            "",
-            "code",
-        ],
+
         "file explorer": [
             "explorer",
         ],
+
         "explorer": [
             "explorer",
         ],
+
         "notepad": [
             "notepad.exe",
         ],
+
         "calculator": [
             "calc.exe",
         ],
     }
 
-    command = applications.get(application)
+    command = applications.get(
+        application
+    )
 
     if not command:
+
         return False
 
     try:
+
         subprocess.Popen(
             command,
             shell=False,
@@ -90,6 +143,7 @@ def open_application(application: str) -> bool:
         return True
 
     except Exception as e:
+
         print(
             f"Failed to open "
             f"{application}:",
@@ -99,18 +153,65 @@ def open_application(application: str) -> bool:
         return False
 
 
-# --------------------------------------------------
+# ==========================================================
 # CLOSE APPLICATION
-# --------------------------------------------------
+# ==========================================================
 
 def close_application(application: str) -> bool:
+
     if not application:
         return False
 
     application = application.lower().strip()
 
-    # Common names → actual Windows process names
+    # ------------------------------------------------------
+    # VS CODE
+    #
+    # IMPORTANT:
+    # NEVER use taskkill for VS Code.
+    #
+    # We close only the exact VS Code window
+    # that Aria opened and is tracking.
+    # ------------------------------------------------------
+
+    vscode_names = {
+        "vscode",
+        "vs code",
+        "vs-code",
+        "visual studio code",
+        "code",
+    }
+
+    if application in vscode_names:
+
+        print(
+            "VS Code close requested."
+        )
+
+        success = close_tracked_vscode()
+
+        if success:
+
+            print(
+                "Closed only the tracked "
+                "VS Code window."
+            )
+
+            return True
+
+        print(
+            "Could not close the tracked "
+            "VS Code window."
+        )
+
+        return False
+
+    # ------------------------------------------------------
+    # NORMAL APPLICATION CLOSE
+    # ------------------------------------------------------
+
     aliases = {
+
         "chrome": "chrome",
         "google chrome": "chrome",
         "chrome browser": "chrome",
@@ -119,10 +220,6 @@ def close_application(application: str) -> bool:
         "microsoft edge": "msedge",
 
         "firefox": "firefox",
-
-        "vscode": "code",
-        "visual studio code": "code",
-        "vs code": "code",
 
         "notepad": "notepad",
 
@@ -135,8 +232,12 @@ def close_application(application: str) -> bool:
         application,
     )
 
-    # Processes Aria should NEVER terminate
+    # ------------------------------------------------------
+    # PROTECTED PROCESSES
+    # ------------------------------------------------------
+
     protected_processes = {
+
         "explorer",
         "explorer.exe",
 
@@ -163,6 +264,7 @@ def close_application(application: str) -> bool:
     }
 
     if process_name in protected_processes:
+
         print(
             f"Blocked attempt to close "
             f"protected process: "
@@ -171,7 +273,12 @@ def close_application(application: str) -> bool:
 
         return False
 
+    # ------------------------------------------------------
+    # CLOSE NORMAL APPLICATION
+    # ------------------------------------------------------
+
     try:
+
         command = [
             "taskkill",
             "/IM",
@@ -193,17 +300,17 @@ def close_application(application: str) -> bool:
         )
 
         if result.stdout:
+
             print(
                 result.stdout.strip()
             )
 
         if result.stderr:
+
             print(
                 result.stderr.strip()
             )
 
-        # taskkill returns 0 when the process
-        # was successfully terminated
         if result.returncode == 0:
 
             print(
@@ -233,12 +340,14 @@ def close_application(application: str) -> bool:
         return False
 
 
-# --------------------------------------------------
+# ==========================================================
 # OPEN WEBSITE
-# --------------------------------------------------
+# ==========================================================
 
 def open_website(url: str) -> bool:
+
     if not url:
+
         return False
 
     url = url.strip()
@@ -249,10 +358,14 @@ def open_website(url: str) -> bool:
             "https://",
         )
     ):
+
         url = "https://" + url
 
     try:
-        webbrowser.open(url)
+
+        webbrowser.open(
+            url
+        )
 
         print(
             f"Opened website: {url}"
@@ -270,17 +383,20 @@ def open_website(url: str) -> bool:
         return False
 
 
-# --------------------------------------------------
+# ==========================================================
 # OPEN FOLDER
-# --------------------------------------------------
+# ==========================================================
 
 def open_folder(folder: str) -> bool:
+
     if not folder:
+
         return False
 
     folder = folder.lower().strip()
 
     folders = {
+
         "downloads": DOWNLOADS,
         "download": DOWNLOADS,
 
@@ -291,9 +407,12 @@ def open_folder(folder: str) -> bool:
         "desktop folder": DESKTOP,
     }
 
-    path = folders.get(folder)
+    path = folders.get(
+        folder
+    )
 
     if not path:
+
         return False
 
     if not path.exists():
@@ -327,24 +446,30 @@ def open_folder(folder: str) -> bool:
         return False
 
 
-# --------------------------------------------------
+# ==========================================================
 # WEB SEARCH
-# --------------------------------------------------
+# ==========================================================
 
 def search_web(query: str) -> bool:
+
     if not query:
+
         return False
 
     query = query.strip()
 
     if not query:
+
         return False
 
     try:
 
         search_url = (
             "https://www.google.com/search?q="
-            + query.replace(" ", "+")
+            + query.replace(
+                " ",
+                "+"
+            )
         )
 
         webbrowser.open(
@@ -368,9 +493,9 @@ def search_web(query: str) -> bool:
         return False
 
 
-# --------------------------------------------------
+# ==========================================================
 # TEST
-# --------------------------------------------------
+# ==========================================================
 
 if __name__ == "__main__":
 
