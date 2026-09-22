@@ -34,6 +34,130 @@ TRACKING_FILE = (
 
 
 # ============================================================
+# ARIA CHROME PROFILE ALIASES
+# ============================================================
+
+# These are the Chrome profiles that Aria should understand.
+#
+# Personal:
+#   Satyam Rajput -> Default
+#   Satyam        -> Profile 9
+#   Umashankar    -> Profile 19
+#
+# College:
+#   Satyam college -> Profile 7
+#   Hansini        -> Profile 14
+#   Uma            -> Profile 17
+
+CHROME_PROFILE_ALIASES = {
+    # --------------------------------------------------------
+    # PERSONAL - SATYAM RAJPUT
+    # --------------------------------------------------------
+
+    "satyam rajput": "Default",
+    "satyam rajput chrome": "Default",
+    "satyam rajput account": "Default",
+
+    "my personal": "Default",
+    "my personal chrome": "Default",
+    "personal chrome": "Default",
+
+    # --------------------------------------------------------
+    # PERSONAL - SATYAM
+    # --------------------------------------------------------
+
+    "satyam": "Profile 9",
+    "satyam chrome": "Profile 9",
+    "satyam account": "Profile 9",
+
+    "secondary satyam": "Profile 9",
+    "secondary satyam chrome": "Profile 9",
+    "secondary personal": "Profile 9",
+    "secondary personal chrome": "Profile 9",
+
+    # --------------------------------------------------------
+    # PERSONAL - UMASHANKAR
+    # --------------------------------------------------------
+
+    "umashankar": "Profile 19",
+    "umashankar chrome": "Profile 19",
+    "umashankar account": "Profile 19",
+
+    "uma shankar": "Profile 19",
+    "uma shankar chrome": "Profile 19",
+
+    # --------------------------------------------------------
+    # COLLEGE - SATYAM
+    # 2411CS060087
+    # --------------------------------------------------------
+
+    "college": "Profile 7",
+    "college chrome": "Profile 7",
+
+    "my college": "Profile 7",
+    "my college chrome": "Profile 7",
+    "my college account": "Profile 7",
+
+    "satyam college": "Profile 7",
+    "satyam college chrome": "Profile 7",
+    "satyam college account": "Profile 7",
+
+    "2411cs060087": "Profile 7",
+    "2411cs060087 chrome": "Profile 7",
+
+    "cs060087": "Profile 7",
+    "cs060087 chrome": "Profile 7",
+
+    # --------------------------------------------------------
+    # COLLEGE - HANSINI
+    # 2411CS060047
+    # --------------------------------------------------------
+
+    "hansini": "Profile 14",
+    "hansini chrome": "Profile 14",
+    "hansini college": "Profile 14",
+    "hansini college chrome": "Profile 14",
+
+    "2411cs060047": "Profile 14",
+    "2411cs060047 chrome": "Profile 14",
+
+    "cs060047": "Profile 14",
+    "cs060047 chrome": "Profile 14",
+
+    # --------------------------------------------------------
+    # COLLEGE - UMA
+    # 2411CS060056
+    # --------------------------------------------------------
+
+    "uma": "Profile 17",
+    "uma chrome": "Profile 17",
+    "uma college": "Profile 17",
+    "uma college chrome": "Profile 17",
+
+    "2411cs060056": "Profile 17",
+    "2411cs060056 chrome": "Profile 17",
+
+    "cs060056": "Profile 17",
+    "cs060056 chrome": "Profile 17",
+}
+
+
+# ============================================================
+# PROFILE DISPLAY NAMES
+# ============================================================
+
+PROFILE_DISPLAY_NAMES = {
+    "Default": "Satyam Rajput",
+    "Profile 9": "Satyam",
+    "Profile 19": "Umashankar",
+
+    "Profile 7": "Satyam college",
+    "Profile 14": "Hansini",
+    "Profile 17": "Uma",
+}
+
+
+# ============================================================
 # PROFILE DISCOVERY
 # ============================================================
 
@@ -88,14 +212,18 @@ def get_chrome_profiles():
     return profiles
 
 
+# ============================================================
+# PROFILE LOOKUP
+# ============================================================
+
 def find_profile_by_alias(target):
     """
-    Find a Chrome profile by name or directory.
+    Find a Chrome profile by:
 
-    target may be:
-        "ragha"
-
-    or a profile dictionary.
+    1. Aria alias
+    2. Exact Chrome profile name
+    3. Exact Chrome profile directory
+    4. Unique partial profile name
     """
 
     if isinstance(target, dict):
@@ -108,19 +236,47 @@ def find_profile_by_alias(target):
 
     profiles = get_chrome_profiles()
 
-    # Exact name
+    # --------------------------------------------------------
+    # Aria alias lookup
+    # --------------------------------------------------------
+
+    alias_directory = CHROME_PROFILE_ALIASES.get(target)
+
+    if alias_directory:
+
+        for profile in profiles:
+
+            if (
+                profile["directory"].lower()
+                == alias_directory.lower()
+            ):
+
+                return profile
+
+    # --------------------------------------------------------
+    # Exact Chrome profile name
+    # --------------------------------------------------------
+
     for profile in profiles:
 
         if profile["name"].lower() == target:
+
             return profile
 
-    # Exact directory
+    # --------------------------------------------------------
+    # Exact Chrome profile directory
+    # --------------------------------------------------------
+
     for profile in profiles:
 
         if profile["directory"].lower() == target:
+
             return profile
 
-    # Partial name
+    # --------------------------------------------------------
+    # Partial profile name
+    # --------------------------------------------------------
+
     matches = [
         profile
         for profile in profiles
@@ -128,9 +284,43 @@ def find_profile_by_alias(target):
     ]
 
     if len(matches) == 1:
+
         return matches[0]
 
     return None
+
+
+# ============================================================
+# PROFILE DISPLAY NAME
+# ============================================================
+
+def get_profile_display_name(profile):
+    """
+    Return a friendly name for a Chrome profile.
+    """
+
+    if isinstance(profile, dict):
+
+        directory = profile.get(
+            "directory",
+            ""
+        )
+
+        name = profile.get(
+            "name",
+            directory
+        )
+
+    else:
+
+        directory = str(profile)
+
+        name = directory
+
+    return PROFILE_DISPLAY_NAMES.get(
+        directory,
+        name
+    )
 
 
 # ============================================================
@@ -143,6 +333,7 @@ def get_chrome_windows():
     windows = []
 
     try:
+
         all_windows = gw.getAllWindows()
 
     except Exception as error:
@@ -235,6 +426,7 @@ def _load_tracking():
             data = json.load(file)
 
         if isinstance(data, dict):
+
             return data
 
     except Exception as error:
@@ -346,6 +538,7 @@ def _find_chrome_executable():
     for path in possible_paths:
 
         if path.exists():
+
             return str(path)
 
     return None
@@ -386,9 +579,13 @@ def open_chrome_profile(target):
 
         return None
 
+    display_name = get_profile_display_name(
+        profile
+    )
+
     print(
         f"Opening Chrome profile: "
-        f"{profile['name']}"
+        f"{display_name}"
     )
 
     print(
@@ -416,13 +613,16 @@ def open_chrome_profile(target):
 
             print(
                 f"Chrome profile "
-                f"{profile['name']} "
+                f"{display_name} "
                 "is already open."
             )
 
             for window in get_chrome_windows():
 
-                if window["handle"] == int(handle):
+                if (
+                    window["handle"]
+                    == int(handle)
+                ):
 
                     return {
                         "profile": profile,
@@ -488,9 +688,11 @@ def open_chrome_profile(target):
             ):
 
                 new_window = window
+
                 break
 
         if new_window:
+
             break
 
     if not new_window:
@@ -503,7 +705,7 @@ def open_chrome_profile(target):
         return None
 
     print(
-        f"Chrome window opened."
+        "Chrome window opened."
     )
 
     print(
@@ -751,6 +953,7 @@ def open_managed_chrome_profile(target):
     )
 
     if not result:
+
         return False
 
     profile = result["profile"]
@@ -944,10 +1147,27 @@ if __name__ == "__main__":
 
         for profile in profiles:
 
-            print(
-                f"{profile['name']} "
-                f"-> {profile['directory']}"
+            display_name = (
+                get_profile_display_name(profile)
             )
+
+            print(
+                f"{display_name} "
+                f"-> {profile['directory']} "
+                f"-> {profile['name']}"
+            )
+
+    print(
+        "\n=== Aria Profile Aliases ==="
+    )
+
+    for alias, directory in (
+        CHROME_PROFILE_ALIASES.items()
+    ):
+
+        print(
+            f"{alias:35} -> {directory}"
+        )
 
     print(
         "\n=== Chrome Windows ==="

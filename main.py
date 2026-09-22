@@ -1,19 +1,23 @@
 import asyncio
+
 import re
 
 from core.speech_to_text import listen
+
 from core.text_to_speech import speak
+
 from core.brain import get_reply
+
 from core.memory import save_memory
-from core.system_control import close_application
+
 from commands.intent import detect_intent
 
 
 # ==========================================================
 # LANGUAGE DETECTION
 # ==========================================================
+def detect_language(text: str):
 
-def detect_language(text: str) -> str:
     """
     Detect English, Hindi, and Hinglish.
     """
@@ -32,34 +36,24 @@ def detect_language(text: str) -> str:
     english_words = {
         "i", "me", "my", "you", "your", "we", "our",
         "they", "he", "she", "it", "this", "that",
-
         "am", "is", "are", "was", "were",
         "have", "has", "had",
         "do", "does", "did",
         "can", "could", "would", "should",
-
         "very", "really", "extremely", "little", "bit",
-
         "good", "great", "bad", "fine", "okay",
         "better", "best", "worst",
-
         "feel", "feeling", "felt",
         "love", "like", "want", "need",
-
         "talk", "speak", "listen", "help",
         "tell", "give", "show",
-
         "what", "why", "how", "when",
         "where", "who",
-
         "hello", "hey", "hi",
         "please", "thanks", "thank",
-
         "joke", "funny",
-
         "computer", "phone", "laptop",
         "code", "coding", "project",
-
         "college", "university",
         "student", "developer",
         "engineering", "course",
@@ -71,60 +65,85 @@ def detect_language(text: str) -> str:
 
     hindi_words = {
         "main", "mai", "mein",
+
         "mujhe", "mujh", "mujhse",
+
         "mera", "meri", "mere",
+
         "hum", "ham",
+
         "humara", "hamara",
+
         "humari", "hamari",
 
         "tum", "tumhe", "tumse",
+
         "tumhara", "tumhari", "tumhare",
 
         "aap", "aapko",
+
         "aapka", "aapki", "aapke",
 
         "hai", "hain", "ho",
+
         "hun", "hoon",
+
         "tha", "thi", "the",
 
         "raha", "rahi", "rahe",
+
         "kar", "karke",
+
         "karna", "karne",
+
         "karo", "karte", "karti",
 
         "kiya", "kiye",
+
         "gaya", "gayi", "gaye",
 
         "aa", "aana", "aaya", "aayi",
+
         "jaa", "jana", "jane",
+
         "jao", "jaana",
 
         "de", "dena", "diya", "do",
+
         "lelo", "lena", "liya",
 
         "bata", "batao", "batana",
+
         "bol", "bolo",
+
         "sun", "suno",
 
         "dekh", "dekho",
+
         "dikha", "dikhao",
 
         "aaj", "kal", "abhi",
+
         "bahut", "bohot",
 
         "achcha", "achha",
+
         "accha", "acha",
 
         "bura",
+
         "kya", "kyu", "kyun",
+
         "kaise", "kaisa", "kaisi",
 
         "kab", "kahan", "kahaan",
+
         "kaun",
 
         "kyon", "kyunki", "kyonki",
 
         "nahi", "nahin",
+
         "haan",
 
         "yaar", "bhai", "dost",
@@ -132,60 +151,83 @@ def detect_language(text: str) -> str:
         "baat", "baatein", "baatain",
 
         "kuch", "kuchh",
+
         "sab", "sabhi",
+
         "sirf",
 
         "phir", "fir",
+
         "ab",
+
         "toh", "to",
+
         "bhi",
 
         "hi", "aur",
+
         "lekin", "magar",
 
         "isliye",
+
         "agar",
+
         "jab",
+
         "jabki",
 
         "jo",
+
         "yeh", "ye",
+
         "woh", "vo",
 
         "iska", "iski",
+
         "uska", "uski",
 
         "chahiye",
+
         "chahta", "chahti", "chahte",
 
         "sakta", "sakti", "sakte",
 
         "pata",
+
         "malum", "maalum",
 
         "samajh",
+
         "samjha", "samjhi",
+
         "samajhta", "samajhti",
 
         "lag", "lagta",
+
         "lagti", "laga",
 
         "rakh", "rakhna", "rakho",
 
         "yaad",
+
         "bhool", "bhul",
 
         "time",
+
         "din", "raat",
+
         "subah", "shaam",
 
         "ghar",
+
         "college",
 
         "padhai",
+
         "padhta", "padhti",
 
         "student",
+
         "log", "insaan",
     }
 
@@ -239,49 +281,41 @@ def detect_language(text: str) -> str:
             "बैड",
             "फाइन",
             "ओके",
-
             "गोइंग",
             "टुडे",
             "टुमॉरो",
             "एवरीthing",
             "नथिंग",
             "समथिंग",
-
             "रीयली",
             "रियली",
-
             "आई",
             "यू",
             "मी",
             "माय",
             "योर",
             "वी",
-
             "कैन",
             "कुड",
             "वुड",
             "शुड",
-
             "टेल",
             "टॉक",
             "स्पीक",
             "लिसन",
             "जोक",
             "हेल्प",
-
             "हैव",
             "हैज़",
             "एम",
             "इज़",
             "आर",
-
             "फील",
             "फीलिंग",
             "लव",
             "लाइक",
             "वांट",
             "नीड",
-
             "व्हाट",
             "व्हाय",
             "हाउ",
@@ -318,13 +352,12 @@ def clean_memory_value(value: str) -> str:
     value = value.strip()
 
     patterns = [
-        r",?\s*please remember( this| it)?\.?$",
-        r",?\s*remember( this| it)?\.?$",
-        r",?\s*do remember( this| it)?\.?$",
-
-        r",?\s*yaad rakhna\.?$",
-        r",?\s*yaad rakhna please\.?$",
-        r",?\s*yaad rakhna isey\.?$",
+        r",?\s\*please remember( this| it)?\.\*?$",
+        r",?\s\*remember( this| it)?\.\*?$",
+        r",?\s\*do remember( this| it)?\.\*?$",
+        r",?\s\*yaad rakhna\.\*?$",
+        r",?\s\*yaad rakhna please\.\*?$",
+        r",?\s\*yaad rakhna isey\.\*?$",
     ]
 
     for pattern in patterns:
@@ -387,10 +420,8 @@ def handle_memory(user_input: str):
         r"^my name is (.+)$",
         r"^i'm called (.+)$",
         r"^i am called (.+)$",
-
         r"^mera naam (.+?) hai$",
         r"^mera naam (.+?) h$",
-
         r"^main (.+?) hoon$",
         r"^mai (.+?) hoon$",
     ]
@@ -490,7 +521,6 @@ def handle_memory(user_input: str):
         r"^i go to (.+)$",
         r"^i study in (.+)$",
         r"^i am from (.+) university$",
-
         r"^main (.+?) mein padhta hoon$",
         r"^main (.+?) mein padhti hoon$",
         r"^mai (.+?) mein padhta hoon$",
@@ -590,16 +620,12 @@ def handle_memory(user_input: str):
     project_patterns = [
         r"^i am building (.+)$",
         r"^i'm building (.+)$",
-
         r"^i am making (.+)$",
         r"^i'm making (.+)$",
-
         r"^i am creating (.+)$",
         r"^i'm creating (.+)$",
-
         r"^i am developing (.+)$",
         r"^i'm developing (.+)$",
-
         r"^i built (.+)$",
     ]
 
@@ -641,7 +667,6 @@ def handle_memory(user_input: str):
         r"^i like (.+)$",
         r"^i really like (.+)$",
         r"^i enjoy (.+)$",
-
         r"^mujhe (.+?) pasand hai$",
         r"^mujhe (.+?) pasand h$",
         r"^mujhe (.+?) bahut pasand hai$",
@@ -770,7 +795,6 @@ def handle_memory(user_input: str):
     hindi_favorite_patterns = [
         r"^meri favorite (.+?) (.+?) hai$",
         r"^mera favorite (.+?) (.+?) hai$",
-
         r"^meri favourite (.+?) (.+?) hai$",
         r"^mera favourite (.+?) (.+?) hai$",
     ]
@@ -821,7 +845,6 @@ def handle_memory(user_input: str):
         r"^remember (.+)$",
         r"^please remember that (.+)$",
         r"^please remember (.+)$",
-
         r"^yaad rakhna ki (.+)$",
         r"^yaad rakhna (.+)$",
     ]
@@ -956,7 +979,6 @@ def is_exit_command(user_input: str) -> bool:
         "goodbye",
         "bye",
         "quit",
-
         "बंद",
         "बाय",
         "अलविदा",
@@ -970,16 +992,18 @@ def is_exit_command(user_input: str) -> bool:
 # ==========================================================
 
 async def handle_computer_command(
+
     user_input: str,
+
     language: str
+
 ) -> bool:
+
     """
     Handle safe computer commands.
 
-    Chrome profile commands are executed by intent.py.
-
-    Normal application closing is executed here using
-    core.system_control.close_application().
+    Chrome profile commands and normal application commands
+    are executed by intent.py.
     """
 
     intent = detect_intent(
@@ -987,57 +1011,11 @@ async def handle_computer_command(
     )
 
     if not intent.get("handled"):
+
         return False
 
-    action = intent.get("action")
-
     # ======================================================
-    # NORMAL APPLICATION CLOSE
-    # ======================================================
-
-    if action == "close":
-
-        target = intent.get(
-            "target",
-            ""
-        ).strip()
-
-        if not target:
-            return False
-
-        print(
-            f"Closing application: {target}"
-        )
-
-        success = close_application(
-            target
-        )
-
-        if success:
-
-            response = (
-                f"Closed {target}."
-            )
-
-        else:
-
-            response = (
-                f"I couldn't close {target}."
-            )
-
-        print(
-            f"Aria: {response}"
-        )
-
-        await speak(
-            response,
-            language=language
-        )
-
-        return True
-
-    # ======================================================
-    # OTHER COMPUTER COMMANDS
+    # COMPUTER COMMAND RESPONSE
     # ======================================================
 
     response = intent.get(
@@ -1065,11 +1043,15 @@ async def handle_computer_command(
 async def main():
 
     print("=" * 50)
+
     print("        ARIA - AI COMPANION")
+
     print("=" * 50)
 
     print("Aria is ready...")
+
     print("Speak to her. Say 'bye' to exit.")
+
     print()
 
     while True:
@@ -1083,30 +1065,39 @@ async def main():
             result = listen()
 
             if not result:
+
                 continue
 
             user_input, audio_data = result
 
             if not user_input:
+
                 continue
 
         except KeyboardInterrupt:
 
             print()
+
             print("Aria stopped.")
+
             break
 
         except OSError as e:
 
             print()
+
             print(f"Microphone error: {e}")
+
             print("Restarting microphone...")
+
             continue
 
         except Exception as e:
 
             print()
+
             print(f"Unexpected error: {e}")
+
             continue
 
         # ----------------------------------------------------
@@ -1148,10 +1139,15 @@ async def main():
         # ----------------------------------------------------
 
         computer_command_handled = (
+
             await handle_computer_command(
+
                 user_input=user_input,
+
                 language=language
+
             )
+
         )
 
         if computer_command_handled:
@@ -1177,8 +1173,11 @@ async def main():
         # ----------------------------------------------------
 
         reply = get_reply(
+
             user_input=user_input,
+
             language=language
+
         )
 
         print(
@@ -1190,11 +1189,17 @@ async def main():
         # ----------------------------------------------------
 
         if re.search(
+
             r"[\u0900-\u097F]",
+
             reply
+
         ):
+
             output_language = "hi"
+
         else:
+
             output_language = "en"
 
         print(
@@ -1206,8 +1211,11 @@ async def main():
         # ----------------------------------------------------
 
         await speak(
+
             reply,
+
             language=output_language
+
         )
 
 
@@ -1226,4 +1234,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
 
         print()
+
         print("Aria stopped.")

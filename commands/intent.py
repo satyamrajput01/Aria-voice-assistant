@@ -1,8 +1,11 @@
 import re
+import webbrowser
+from urllib.parse import quote_plus
 
 from commands.computer_search import (
     search_applications,
     open_search_result,
+    close_application,
 )
 
 from commands.chrome_control import (
@@ -12,6 +15,13 @@ from commands.chrome_control import (
     close_managed_chrome_profile,
 )
 
+from commands.file_control import (
+    open_folder,
+    create_folder,
+    delete_folder,
+    find_custom_folder,
+)
+
 
 # ============================================================
 # STATE
@@ -19,6 +29,26 @@ from commands.chrome_control import (
 
 pending_app_results = []
 pending_chrome_profiles = []
+pending_folder_deletion = None
+
+
+# ============================================================
+# WEBSITE ALIASES
+# ============================================================
+
+WEBSITE_ALIASES = {
+    "youtube": "https://www.youtube.com",
+    "gmail": "https://mail.google.com",
+    "google": "https://www.google.com",
+    "github": "https://github.com",
+    "instagram": "https://www.instagram.com",
+    "facebook": "https://www.facebook.com",
+    "linkedin": "https://www.linkedin.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "chatgpt": "https://chatgpt.com",
+    "reddit": "https://www.reddit.com",
+    "stackoverflow": "https://stackoverflow.com",
+}
 
 
 # ============================================================
@@ -99,9 +129,6 @@ APP_ALIASES = {
 # ============================================================
 
 def normalize(text):
-    """
-    Normalize user command text.
-    """
 
     if not text:
         return ""
@@ -109,7 +136,6 @@ def normalize(text):
     text = text.lower().strip()
 
     text = text.replace("-", " ")
-    text = text.replace("_", " ")
 
     text = re.sub(
         r"\s+",
@@ -121,18 +147,767 @@ def normalize(text):
 
 
 # ============================================================
-# APP NAME MATCHING
+# WEBSITE HELPERS
+# ============================================================
+
+def open_website(name):
+
+    name = normalize(name)
+
+    url = WEBSITE_ALIASES.get(name)
+
+    if not url:
+        return False
+
+    try:
+        webbrowser.open(url)
+        return True
+
+    except Exception as error:
+        print(
+            f"Website opening error: {error}"
+        )
+        return False
+
+
+def is_known_website(name):
+
+    return normalize(name) in WEBSITE_ALIASES
+
+
+# ============================================================
+# WEBSITE OPEN
+# ============================================================
+
+def handle_website_open(command):
+
+    text = normalize(command)
+
+    if not text.startswith("open "):
+        return None
+
+    target = text[5:].strip()
+
+    if not target:
+        return None
+
+    target = re.sub(
+        r"\bwebsite\b",
+        "",
+        target,
+    ).strip()
+
+    target = re.sub(
+        r"\bsite\b",
+        "",
+        target,
+    ).strip()
+
+    if not is_known_website(target):
+        return None
+
+    if open_website(target):
+
+        display_names = {
+            "youtube": "YouTube",
+            "gmail": "Gmail",
+            "google": "Google",
+            "github": "GitHub",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+            "linkedin": "LinkedIn",
+            "whatsapp": "WhatsApp",
+            "chatgpt": "ChatGPT",
+            "reddit": "Reddit",
+            "stackoverflow": "Stack Overflow",
+        }
+
+        display_name = display_names.get(
+            target,
+            target.title(),
+        )
+
+        return {
+            "handled": True,
+            "action": "open_website",
+            "target": target,
+            "response": (
+                f"Opening {display_name}."
+            ),
+        }
+
+    return {
+        "handled": True,
+        "action": "website_open_failed",
+        "target": target,
+        "response": (
+            f"I couldn't open {target}."
+        ),
+    }
+
+
+# ============================================================
+# WEB SEARCH
+# ============================================================
+
+def handle_web_search(command):
+
+    text = normalize(command)
+
+    search_engine = None
+    query = ""
+
+    # --------------------------------------------------------
+    # SEARCH GOOGLE
+    # --------------------------------------------------------
+
+    google_match = re.match(
+        r"^search\s+google\s+(?:for\s+)?(.+)$",
+        text,
+    )
+
+    if google_match:
+
+        search_engine = "google"
+        query = google_match.group(1).strip()
+
+    # --------------------------------------------------------
+    # SEARCH YOUTUBE
+    # --------------------------------------------------------
+
+    youtube_match = re.match(
+        r"^search\s+youtube\s+(?:for\s+)?(.+)$",
+        text,
+    )
+
+    if youtube_match:
+
+        search_engine = "youtube"
+        query = youtube_match.group(1).strip()
+
+    # --------------------------------------------------------
+    # DIRECT GOOGLE SEARCH
+    # --------------------------------------------------------
+
+    if search_engine is None:
+
+        google_direct = re.match(
+            r"^google\s+(.+)$",
+            text,
+        )
+
+        if google_direct:
+
+            search_engine = "google"
+            query = google_direct.group(1).strip()
+
+    # --------------------------------------------------------
+    # DIRECT YOUTUBE SEARCH
+    # --------------------------------------------------------
+
+    if search_engine is None:
+
+        youtube_direct = re.match(
+            r"^youtube\s+(.+)$",
+            text,
+        )
+
+        if youtube_direct:
+
+            search_engine = "youtube"
+            query = youtube_direct.group(1).strip()
+
+    # --------------------------------------------------------
+    # Validate
+    # --------------------------------------------------------
+
+    if search_engine is None:
+        return None
+
+    if not query:
+
+        return {
+            "handled": True,
+            "action": "search_failed",
+            "response": (
+                "What should I search for?"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # Build URL
+    # --------------------------------------------------------
+
+    encoded_query = quote_plus(query)
+
+    if search_engine == "google":
+
+        url = (
+            "https://www.google.com/search"
+            f"?q={encoded_query}"
+        )
+
+        display_engine = "Google"
+
+    else:
+
+        url = (
+            "https://www.youtube.com/results"
+            f"?search_query={encoded_query}"
+        )
+
+        display_engine = "YouTube"
+
+    # --------------------------------------------------------
+    # Open browser
+    # --------------------------------------------------------
+
+    try:
+
+        webbrowser.open(url)
+
+        return {
+            "handled": True,
+            "action": "web_search",
+            "target": query,
+            "engine": search_engine,
+            "response": (
+                f"Searching {display_engine} "
+                f"for {query}."
+            ),
+        }
+
+    except Exception as error:
+
+        print(
+            f"Web search error: {error}"
+        )
+
+        return {
+            "handled": True,
+            "action": "search_failed",
+            "target": query,
+            "response": (
+                "I couldn't perform that search."
+            ),
+        }
+
+
+# ============================================================
+# FOLDER OPEN
+# ============================================================
+
+def handle_folder_open(command):
+
+    text = normalize(command)
+
+    # --------------------------------------------------------
+    # Standard folders
+    # --------------------------------------------------------
+
+    standard_pattern = re.match(
+        r"^open\s+"
+        r"(downloads|documents|desktop|pictures|music|videos)$",
+        text,
+    )
+
+    if standard_pattern:
+
+        folder = standard_pattern.group(1)
+
+        return open_folder(folder)
+
+    # --------------------------------------------------------
+    # open folder college
+    # --------------------------------------------------------
+
+    folder_pattern = re.match(
+        r"^open\s+folder\s+(.+)$",
+        text,
+    )
+
+    if folder_pattern:
+
+        folder = folder_pattern.group(1).strip()
+
+        if folder:
+
+            return open_folder(folder)
+
+    # --------------------------------------------------------
+    # open the college folder
+    # --------------------------------------------------------
+
+    the_folder_pattern = re.match(
+        r"^open\s+the\s+(.+)\s+folder$",
+        text,
+    )
+
+    if the_folder_pattern:
+
+        folder = the_folder_pattern.group(1).strip()
+
+        if folder:
+
+            return open_folder(folder)
+
+    # --------------------------------------------------------
+    # open college folder
+    # --------------------------------------------------------
+
+    ending_folder_pattern = re.match(
+        r"^open\s+(.+)\s+folder$",
+        text,
+    )
+
+    if ending_folder_pattern:
+
+        folder = ending_folder_pattern.group(1).strip()
+
+        if folder:
+
+            return open_folder(folder)
+
+    return None
+
+
+# ============================================================
+# FOLDER CREATE
+# ============================================================
+
+def handle_folder_create(command):
+
+    text = normalize(command)
+
+    patterns = [
+        r"^create\s+folder\s+(.+)$",
+        r"^create\s+a\s+folder\s+(.+)$",
+        r"^make\s+folder\s+(.+)$",
+        r"^make\s+a\s+folder\s+(.+)$",
+    ]
+
+    for pattern in patterns:
+
+        match = re.match(
+            pattern,
+            text,
+        )
+
+        if not match:
+            continue
+
+        folder_name = match.group(1).strip()
+
+        # Supports:
+        # called Aria Notes
+        # named Aria Notes
+
+        folder_name = re.sub(
+            r"^(?:called|named)\s+",
+            "",
+            folder_name,
+        ).strip()
+
+        if not folder_name:
+
+            return {
+                "handled": True,
+                "success": False,
+                "response": (
+                    "Tell me the name of the folder."
+                ),
+            }
+
+        return create_folder(
+            folder_name
+        )
+
+    return None
+
+
+# ============================================================
+# FOLDER DELETE
+# ============================================================
+
+def handle_folder_delete(command):
+
+    global pending_folder_deletion
+
+    text = normalize(command)
+
+    # --------------------------------------------------------
+    # HANDLE CONFIRMATION
+    # --------------------------------------------------------
+
+    if pending_folder_deletion is not None:
+
+        # ----------------------------------------------------
+        # YES / CONFIRM
+        # ----------------------------------------------------
+
+        affirmative_phrases = {
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "yes please",
+            "do it",
+            "confirm",
+            "confirmed",
+            "delete it",
+            "delete that",
+            "delete that folder",
+            "go ahead",
+            "sure",
+            "haan",
+            "han",
+            "ha",
+            "ye",
+            "y e",
+            "y",
+        }
+
+        # Exact common confirmations
+        if text in affirmative_phrases:
+
+            folder_name = (
+                pending_folder_deletion
+            )
+
+            pending_folder_deletion = None
+
+            return delete_folder(
+                folder_name
+            )
+
+        # ----------------------------------------------------
+        # NATURAL CONFIRMATION SENTENCES
+        # ----------------------------------------------------
+
+        affirmative_patterns = [
+            r"^(?:yes|yeah|yep|yup)\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:yes|yeah|yep|yup)\s+please\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:yes|yeah|yep|yup)\s+you\s+can\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:yes|yeah|yep|yup)\s+(?:go\s+ahead|do\s+it)$",
+            r"^(?:please\s+)?(?:go\s+ahead|do\s+it)$",
+            r"^(?:sure|confirm|confirmed)\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:haan|han|ha)\s+(?:delete|remove)(?:\s+.+)?$",
+        ]
+
+        confirmed = False
+
+        for pattern in affirmative_patterns:
+
+            if re.match(
+                pattern,
+                text,
+            ):
+
+                confirmed = True
+                break
+
+        if confirmed:
+
+            folder_name = (
+                pending_folder_deletion
+            )
+
+            pending_folder_deletion = None
+
+            return delete_folder(
+                folder_name
+            )
+
+        # ----------------------------------------------------
+        # NO / CANCEL
+        # ----------------------------------------------------
+
+        negative_phrases = {
+            "no",
+            "nope",
+            "nah",
+            "cancel",
+            "cancel it",
+            "cancel that",
+            "cancel deletion",
+            "don't",
+            "dont",
+            "do not",
+            "don't delete",
+            "dont delete",
+            "don't delete it",
+            "dont delete it",
+            "don't delete that",
+            "dont delete that",
+            "don't delete that folder",
+            "dont delete that folder",
+            "no thanks",
+            "no don't",
+            "no dont",
+            "nahi",
+            "nahin",
+        }
+
+        if text in negative_phrases:
+
+            folder_name = (
+                pending_folder_deletion
+            )
+
+            pending_folder_deletion = None
+
+            return {
+                "handled": True,
+                "success": False,
+                "action": "delete_cancelled",
+                "target": folder_name,
+                "response": (
+                    f"Okay. I won't delete "
+                    f"the folder {folder_name}."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # NATURAL CANCELLATION SENTENCES
+        # ----------------------------------------------------
+
+        negative_patterns = [
+            r"^(?:no|nope|nah)\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:no|nope|nah)\s+(?:don't|dont|do\s+not)\s+(?:delete|remove)(?:\s+.+)?$",
+            r"^(?:please\s+)?cancel(?:\s+it|\s+that|\s+deletion)?$",
+            r"^(?:nahi|nahin)\s+(?:delete|remove)(?:\s+.+)?$",
+        ]
+
+        cancelled = False
+
+        for pattern in negative_patterns:
+
+            if re.match(
+                pattern,
+                text,
+            ):
+
+                cancelled = True
+                break
+
+        if cancelled:
+
+            folder_name = (
+                pending_folder_deletion
+            )
+
+            pending_folder_deletion = None
+
+            return {
+                "handled": True,
+                "success": False,
+                "action": "delete_cancelled",
+                "target": folder_name,
+                "response": (
+                    f"Okay. I won't delete "
+                    f"the folder {folder_name}."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # UNKNOWN RESPONSE
+        # ----------------------------------------------------
+
+        return {
+            "handled": True,
+            "success": False,
+            "action": (
+                "delete_confirmation_required"
+            ),
+            "response": (
+                "Please say yes to delete it "
+                "or no to cancel."
+            ),
+        }
+
+    # --------------------------------------------------------
+    # NEW DELETE COMMAND
+    # --------------------------------------------------------
+
+    patterns = [
+
+        # delete folder Aria Notes
+        r"^delete\s+folder\s+(.+)$",
+
+        # delete the folder Aria Notes
+        r"^delete\s+the\s+folder\s+(.+)$",
+
+        # delete folder named Aria Notes
+        # delete folder called Aria Notes
+        r"^delete\s+folder\s+"
+        r"(?:named|called)\s+(.+)$",
+
+        # delete the folder named Aria Notes
+        # delete the folder called Aria Notes
+        r"^delete\s+the\s+folder\s+"
+        r"(?:named|called)\s+(.+)$",
+
+        # remove folder Aria Notes
+        r"^remove\s+folder\s+(.+)$",
+
+        # remove the folder Aria Notes
+        r"^remove\s+the\s+folder\s+(.+)$",
+
+        # delete Aria Notes folder
+        r"^delete\s+(.+)\s+folder$",
+
+        # remove Aria Notes folder
+        r"^remove\s+(.+)\s+folder$",
+    ]
+
+    for pattern in patterns:
+
+        match = re.match(
+            pattern,
+            text,
+        )
+
+        if not match:
+            continue
+
+        folder_name = match.group(1).strip()
+
+        # ----------------------------------------------------
+        # Remove called/named if captured
+        # ----------------------------------------------------
+
+        folder_name = re.sub(
+            r"^(?:called|named)\s+",
+            "",
+            folder_name,
+        ).strip()
+
+        if not folder_name:
+
+            return {
+                "handled": True,
+                "success": False,
+                "response": (
+                    "Tell me the name of the "
+                    "folder to delete."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # Protected standard folders
+        # ----------------------------------------------------
+
+        protected_folders = {
+            "downloads",
+            "documents",
+            "desktop",
+            "pictures",
+            "music",
+            "videos",
+        }
+
+        if folder_name in protected_folders:
+
+            return {
+                "handled": True,
+                "success": False,
+                "action": "protected_folder",
+                "target": folder_name,
+                "response": (
+                    f"I won't delete the "
+                    f"{folder_name} system folder."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # Find custom folder
+        # ----------------------------------------------------
+
+        matches = find_custom_folder(
+            folder_name
+        )
+
+        if not matches:
+
+            return {
+                "handled": True,
+                "success": False,
+                "action": "folder_not_found",
+                "target": folder_name,
+                "response": (
+                    f"I couldn't find a folder "
+                    f"named {folder_name}."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # Multiple matches
+        # ----------------------------------------------------
+
+        if len(matches) > 1:
+
+            response = (
+                f"I found multiple folders "
+                f"named {folder_name}:"
+            )
+
+            for index, path in enumerate(
+                matches,
+                start=1,
+            ):
+
+                response += (
+                    f"\n{index}. {path}"
+                )
+
+            return {
+                "handled": True,
+                "success": False,
+                "action": (
+                    "folder_selection_required"
+                ),
+                "target": folder_name,
+                "matches": matches,
+                "response": response,
+            }
+
+        # ----------------------------------------------------
+        # Ask for confirmation
+        # ----------------------------------------------------
+
+        pending_folder_deletion = (
+            matches[0]
+        )
+
+        return {
+            "handled": True,
+            "success": False,
+            "action": (
+                "delete_confirmation_required"
+            ),
+            "target": folder_name,
+            "path": matches[0],
+            "response": (
+                f"I found the folder "
+                f"{folder_name}. "
+                "Are you sure you want me "
+                "to delete it?"
+            ),
+        }
+
+    return None
+
+
+# ============================================================
+# APPLICATION NAME MATCHING
 # ============================================================
 
 def normalized_app_name(name):
-    """
-    Normalize an application name for comparison.
-    """
 
     name = normalize(name)
 
     name = re.sub(
-        r"\s*\(launcher\)$",
+        r"\s+\(launcher\)$",
         "",
         name,
         flags=re.IGNORECASE,
@@ -141,46 +916,33 @@ def normalized_app_name(name):
     return name
 
 
-def is_exact_app_match(query, result):
-    """
-    Check whether a search result is an exact or alias match.
+def is_exact_app_match(
+    query,
+    result,
+):
 
-    This prevents commands such as:
-
-        open vscode
-        open vs code
-        open visual studio code
-
-    from being confused with:
-
-        CodeBlocks
-        CodeBlocks Launcher
-        other applications containing 'code'
-    """
-
-    query = normalized_app_name(query)
+    query = normalized_app_name(
+        query
+    )
 
     result_name = normalized_app_name(
-        result.get("name", "")
+        result.get(
+            "name",
+            "",
+        )
     )
 
     if not query or not result_name:
         return False
 
-    # --------------------------------------------------------
     # Direct exact match
-    # --------------------------------------------------------
-
     if query == result_name:
         return True
 
-    # --------------------------------------------------------
     # Alias match
-    # --------------------------------------------------------
-
     aliases = APP_ALIASES.get(
         query,
-        []
+        [],
     )
 
     for alias in aliases:
@@ -192,10 +954,7 @@ def is_exact_app_match(query, result):
         if result_name == alias:
             return True
 
-    # --------------------------------------------------------
-    # VS CODE SPECIAL HANDLING
-    # --------------------------------------------------------
-
+    # VS Code
     vscode_queries = {
         "vscode",
         "vs code",
@@ -218,12 +977,6 @@ def is_exact_app_match(query, result):
 # ============================================================
 
 def find_best_app_match(query):
-    """
-    Find one strong application match.
-
-    Exact and alias matches always win over
-    fuzzy matches.
-    """
 
     results = search_applications(
         query
@@ -238,20 +991,15 @@ def find_best_app_match(query):
 
         if is_exact_app_match(
             query,
-            result
+            result,
         ):
 
             exact_matches.append(
                 result
             )
 
-    # --------------------------------------------------------
-    # Exact match found
-    # --------------------------------------------------------
-
     if exact_matches:
 
-        # Prefer Start Menu application.
         exact_matches.sort(
             key=lambda item: (
                 0
@@ -261,32 +1009,28 @@ def find_best_app_match(query):
 
                 -item.get(
                     "score",
-                    0
+                    0,
                 ),
             )
         )
 
         return (
             exact_matches[0],
-            exact_matches
+            exact_matches,
         )
-
-    # --------------------------------------------------------
-    # No exact match
-    # --------------------------------------------------------
 
     good_matches = [
         result
         for result in results
         if result.get(
             "score",
-            0
+            0,
         ) >= 0.75
     ]
 
     return (
         None,
-        good_matches[:10]
+        good_matches[:10],
     )
 
 
@@ -295,9 +1039,6 @@ def find_best_app_match(query):
 # ============================================================
 
 def clean_chrome_target(text):
-    """
-    Remove Chrome-related words from a command.
-    """
 
     text = normalize(text)
 
@@ -311,7 +1052,7 @@ def clean_chrome_target(text):
 
         text = text.replace(
             replacement,
-            " "
+            " ",
         )
 
     text = re.sub(
@@ -324,9 +1065,6 @@ def clean_chrome_target(text):
 
 
 def get_profile_display_names():
-    """
-    Get available Chrome profile names.
-    """
 
     profiles = get_chrome_profiles()
 
@@ -352,14 +1090,6 @@ def get_profile_display_names():
 # ============================================================
 
 def handle_chrome_open(command):
-    """
-    Handle commands such as:
-
-        open college chrome
-        open Satyam chrome
-        open Uma chrome
-        open Hansini chrome
-    """
 
     command_normalized = normalize(
         command
@@ -373,12 +1103,10 @@ def handle_chrome_open(command):
     ):
         return None
 
-    target = command_normalized
-
     target = re.sub(
         r"^open\s+",
         "",
-        target,
+        command_normalized,
     )
 
     target = clean_chrome_target(
@@ -397,10 +1125,13 @@ def handle_chrome_open(command):
 
             return {
                 "handled": True,
-                "action": "chrome_profile_not_found",
+                "action": (
+                    "chrome_profile_not_found"
+                ),
                 "target": "",
                 "response": (
-                    "I couldn't find any Chrome profiles."
+                    "I couldn't find any "
+                    "Chrome profiles."
                 ),
             }
 
@@ -425,22 +1156,31 @@ def handle_chrome_open(command):
                 ),
             }
 
+        global pending_chrome_profiles
+
+        pending_chrome_profiles = profiles
+
+        options = "\n".join(
+            f"{index + 1}. "
+            f"{profile.get('name')}"
+            for index, profile
+            in enumerate(profiles)
+        )
+
         return {
             "handled": True,
-            "action": "choose_chrome_profile",
+            "action": (
+                "choose_chrome_profile"
+            ),
             "response": (
-                "Which Chrome profile should I open?\n"
-                + "\n".join(
-                    f"{index + 1}. "
-                    f"{profile.get('name')}"
-                    for index, profile
-                    in enumerate(profiles)
-                )
+                "Which Chrome profile "
+                "should I open?\n"
+                + options
             ),
         }
 
     # --------------------------------------------------------
-    # Specific Chrome profile
+    # Specific profile
     # --------------------------------------------------------
 
     profile = find_profile_by_alias(
@@ -472,11 +1212,13 @@ def handle_chrome_open(command):
 
     return {
         "handled": True,
-        "action": "chrome_profile_not_found",
+        "action": (
+            "chrome_profile_not_found"
+        ),
         "target": target,
         "response": (
-            f"I couldn't find a Chrome profile "
-            f"named {target}. "
+            f"I couldn't find a Chrome "
+            f"profile named {target}. "
             f"Available profiles are: "
             f"{', '.join(available)}."
         ),
@@ -488,15 +1230,6 @@ def handle_chrome_open(command):
 # ============================================================
 
 def handle_chrome_close(command):
-    """
-    Handle:
-
-        close college chrome
-        close Satyam chrome
-        close Uma chrome
-        close Hansini chrome
-        close chrome
-    """
 
     command_normalized = normalize(
         command
@@ -510,12 +1243,10 @@ def handle_chrome_close(command):
     ):
         return None
 
-    target = command_normalized
-
     target = re.sub(
         r"^close\s+",
         "",
-        target,
+        command_normalized,
     )
 
     target = clean_chrome_target(
@@ -536,7 +1267,8 @@ def handle_chrome_close(command):
                 "handled": True,
                 "action": "chrome_not_found",
                 "response": (
-                    "I couldn't find any Chrome profiles."
+                    "I couldn't find any "
+                    "Chrome profiles."
                 ),
             }
 
@@ -544,8 +1276,10 @@ def handle_chrome_close(command):
 
             profile = profiles[0]
 
-            success = close_managed_chrome_profile(
-                profile.get("name")
+            success = (
+                close_managed_chrome_profile(
+                    profile.get("name")
+                )
             )
 
             if success:
@@ -565,7 +1299,9 @@ def handle_chrome_close(command):
 
             return {
                 "handled": True,
-                "action": "chrome_close_failed",
+                "action": (
+                    "chrome_close_failed"
+                ),
                 "target": profile.get(
                     "name"
                 ),
@@ -576,17 +1312,26 @@ def handle_chrome_close(command):
                 ),
             }
 
+        global pending_chrome_profiles
+
+        pending_chrome_profiles = profiles
+
+        options = "\n".join(
+            f"{index + 1}. "
+            f"{profile.get('name')}"
+            for index, profile
+            in enumerate(profiles)
+        )
+
         return {
             "handled": True,
-            "action": "choose_chrome_profile_to_close",
+            "action": (
+                "choose_chrome_profile_to_close"
+            ),
             "response": (
-                "Which Chrome profile should I close?\n"
-                + "\n".join(
-                    f"{index + 1}. "
-                    f"{profile.get('name')}"
-                    for index, profile
-                    in enumerate(profiles)
-                )
+                "Which Chrome profile "
+                "should I close?\n"
+                + options
             ),
         }
 
@@ -604,11 +1349,13 @@ def handle_chrome_close(command):
 
         return {
             "handled": True,
-            "action": "chrome_profile_not_found",
+            "action": (
+                "chrome_profile_not_found"
+            ),
             "target": target,
             "response": (
-                f"I couldn't find a Chrome profile "
-                f"named {target}. "
+                f"I couldn't find a Chrome "
+                f"profile named {target}. "
                 f"Available profiles are: "
                 f"{', '.join(available)}."
             ),
@@ -648,27 +1395,20 @@ def handle_chrome_close(command):
 # PENDING CHROME SELECTION
 # ============================================================
 
-def handle_pending_chrome_selection(command):
-    """
-    Handle selection after Aria asks which Chrome
-    profile should be opened.
-    """
+def handle_pending_chrome_selection(
+    command
+):
 
     global pending_chrome_profiles
 
     if not pending_chrome_profiles:
         return None
 
-    text = normalize(
-        command
-    )
+    text = normalize(command)
 
     selected = None
 
-    # --------------------------------------------------------
     # Number selection
-    # --------------------------------------------------------
-
     number_match = re.fullmatch(
         r"\d+",
         text,
@@ -686,15 +1426,10 @@ def handle_pending_chrome_selection(command):
         ):
 
             selected = (
-                pending_chrome_profiles[
-                    index
-                ]
+                pending_chrome_profiles[index]
             )
 
-    # --------------------------------------------------------
     # Name selection
-    # --------------------------------------------------------
-
     if selected is None:
 
         for profile in pending_chrome_profiles:
@@ -702,7 +1437,7 @@ def handle_pending_chrome_selection(command):
             name = normalize(
                 profile.get(
                     "name",
-                    ""
+                    "",
                 )
             )
 
@@ -715,9 +1450,12 @@ def handle_pending_chrome_selection(command):
 
         return {
             "handled": True,
-            "action": "invalid_chrome_selection",
+            "action": (
+                "invalid_chrome_selection"
+            ),
             "response": (
-                "I couldn't match that Chrome profile."
+                "I couldn't match that "
+                "Chrome profile."
             ),
         }
 
@@ -737,23 +1475,20 @@ def handle_pending_chrome_selection(command):
 # PENDING APP SELECTION
 # ============================================================
 
-def handle_pending_app_selection(command):
-    """
-    Handle numeric application selection.
-    """
+def handle_pending_app_selection(
+    command
+):
 
     global pending_app_results
 
     if not pending_app_results:
         return None
 
-    text = normalize(
-        command
-    )
+    text = normalize(command)
 
     if not re.fullmatch(
         r"\d+",
-        text
+        text,
     ):
         return None
 
@@ -766,9 +1501,12 @@ def handle_pending_app_selection(command):
 
         return {
             "handled": True,
-            "action": "invalid_app_selection",
+            "action": (
+                "invalid_app_selection"
+            ),
             "response": (
-                "That application number is not valid."
+                "That application "
+                "number is not valid."
             ),
         }
 
@@ -815,26 +1553,10 @@ def handle_pending_app_selection(command):
 # ============================================================
 
 def handle_application_open(command):
-    """
-    Handle normal application opening.
 
-    Examples:
+    text = normalize(command)
 
-        open vscode
-        open vs code
-        open vs-code
-        open visual studio code
-        open notepad
-        open calculator
-    """
-
-    text = normalize(
-        command
-    )
-
-    if not text.startswith(
-        "open "
-    ):
+    if not text.startswith("open "):
         return None
 
     target = text[5:].strip()
@@ -842,22 +1564,12 @@ def handle_application_open(command):
     if not target:
         return None
 
-    # Chrome handled separately.
+    # Chrome handled separately
     if "chrome" in target:
         return None
 
     # --------------------------------------------------------
     # VS CODE DIRECT ROUTING
-    # --------------------------------------------------------
-    # This is intentionally before the general search.
-    # It guarantees that:
-    #
-    # open vscode
-    # open vs code
-    # open vs-code
-    # open visual studio code
-    #
-    # all open Visual Studio Code directly.
     # --------------------------------------------------------
 
     vscode_targets = {
@@ -865,6 +1577,7 @@ def handle_application_open(command):
         "vs code",
         "vs-code",
         "visual studio code",
+        "code",
     }
 
     if target in vscode_targets:
@@ -880,7 +1593,7 @@ def handle_application_open(command):
             result_name = normalized_app_name(
                 result.get(
                     "name",
-                    ""
+                    "",
                 )
             )
 
@@ -897,7 +1610,7 @@ def handle_application_open(command):
                 vscode_result = result
                 break
 
-        # Fallback to executable result.
+        # Fallback
         if vscode_result is None:
 
             for result in results:
@@ -905,7 +1618,7 @@ def handle_application_open(command):
                 result_name = normalized_app_name(
                     result.get(
                         "name",
-                        ""
+                        "",
                     )
                 )
 
@@ -925,7 +1638,9 @@ def handle_application_open(command):
                 return {
                     "handled": True,
                     "action": "open",
-                    "target": "Visual Studio Code",
+                    "target": (
+                        "Visual Studio Code"
+                    ),
                     "response": (
                         "Opening Visual Studio Code."
                     ),
@@ -934,7 +1649,9 @@ def handle_application_open(command):
             return {
                 "handled": True,
                 "action": "open_failed",
-                "target": "Visual Studio Code",
+                "target": (
+                    "Visual Studio Code"
+                ),
                 "response": (
                     "I found Visual Studio Code "
                     "but couldn't open it."
@@ -944,24 +1661,22 @@ def handle_application_open(command):
         return {
             "handled": True,
             "action": "not_found",
-            "target": "Visual Studio Code",
+            "target": (
+                "Visual Studio Code"
+            ),
             "response": (
-                "I couldn't find Visual Studio Code "
-                "on your computer."
+                "I couldn't find Visual Studio "
+                "Code on your computer."
             ),
         }
 
     # --------------------------------------------------------
-    # NORMAL APPLICATION SEARCH
+    # Normal application
     # --------------------------------------------------------
 
-    best, exact_matches = find_best_app_match(
-        target
+    best, exact_matches = (
+        find_best_app_match(target)
     )
-
-    # --------------------------------------------------------
-    # Exact match
-    # --------------------------------------------------------
 
     if best:
 
@@ -997,7 +1712,7 @@ def handle_application_open(command):
         }
 
     # --------------------------------------------------------
-    # Genuine ambiguity
+    # Multiple exact matches
     # --------------------------------------------------------
 
     if len(exact_matches) > 1:
@@ -1009,7 +1724,7 @@ def handle_application_open(command):
 
             name = result.get(
                 "name",
-                ""
+                "",
             )
 
             name_key = name.lower()
@@ -1017,9 +1732,7 @@ def handle_application_open(command):
             if name_key not in names:
 
                 names.add(name_key)
-                unique.append(
-                    result
-                )
+                unique.append(result)
 
         if len(unique) == 1:
 
@@ -1056,14 +1769,11 @@ def handle_application_open(command):
             "handled": True,
             "action": "choose_app",
             "response": (
-                f"I found multiple matches for "
-                f"{target}:\n{options}"
+                f"I found multiple matches "
+                f"for {target}:\n"
+                f"{options}"
             ),
         }
-
-    # --------------------------------------------------------
-    # Nothing found
-    # --------------------------------------------------------
 
     return {
         "handled": True,
@@ -1081,20 +1791,10 @@ def handle_application_open(command):
 # ============================================================
 
 def handle_application_close(command):
-    """
-    Handle normal application closing.
 
-    Chrome is excluded because Chrome profiles
-    require special handling.
-    """
+    text = normalize(command)
 
-    text = normalize(
-        command
-    )
-
-    if not text.startswith(
-        "close "
-    ):
+    if not text.startswith("close "):
         return None
 
     target = text[6:].strip()
@@ -1102,15 +1802,32 @@ def handle_application_close(command):
     if not target:
         return None
 
+    # Chrome handled separately
     if "chrome" in target:
         return None
 
+    result = close_application(target)
+
+    if result.get("success"):
+        return {
+            "handled": True,
+            "success": True,
+            "action": "close",
+            "target": target,
+            "response": result.get(
+                "response",
+                f"Closed {target}."
+            ),
+        }
+
     return {
         "handled": True,
-        "action": "close",
+        "success": False,
+        "action": "close_failed",
         "target": target,
-        "response": (
-            f"Closing {target}."
+        "response": result.get(
+            "response",
+            f"I couldn't close {target}."
         ),
     }
 
@@ -1120,12 +1837,6 @@ def handle_application_close(command):
 # ============================================================
 
 def detect_intent(command):
-    """
-    Main intent router.
-    """
-
-    global pending_app_results
-    global pending_chrome_profiles
 
     command = command.strip()
 
@@ -1136,21 +1847,51 @@ def detect_intent(command):
         }
 
     # --------------------------------------------------------
+    # FOLDER DELETE / CONFIRMATION
+    #
+    # This must be first because responses like:
+    # "yes"
+    # "yes delete that folder"
+    # "haan"
+    # "y e"
+    # need to be handled while deletion is pending.
+    # --------------------------------------------------------
+
+    normalized_command = normalize(
+        command
+    )
+
+    if (
+        pending_folder_deletion is not None
+        or re.match(
+            r"^(delete|remove)\s+",
+            normalized_command,
+        )
+    ):
+
+        result = handle_folder_delete(
+            command
+        )
+
+        if result:
+            return result
+
+    # --------------------------------------------------------
     # Pending Chrome selection
     # --------------------------------------------------------
 
     if pending_chrome_profiles:
 
-        result = handle_pending_chrome_selection(
-            command
+        result = (
+            handle_pending_chrome_selection(
+                command
+            )
         )
 
         if result:
 
             if (
-                result.get(
-                    "action"
-                )
+                result.get("action")
                 == "chrome_selection"
             ):
 
@@ -1158,8 +1899,10 @@ def detect_intent(command):
                     "profile"
                 )
 
-                success = open_managed_chrome_profile(
-                    profile
+                success = (
+                    open_managed_chrome_profile(
+                        profile
+                    )
                 )
 
                 if success:
@@ -1185,15 +1928,63 @@ def detect_intent(command):
 
     if pending_app_results:
 
-        result = handle_pending_app_selection(
-            command
+        result = (
+            handle_pending_app_selection(
+                command
+            )
         )
 
         if result:
             return result
 
     # --------------------------------------------------------
-    # Chrome OPEN
+    # FOLDER OPEN
+    #
+    # Must happen before web search.
+    # --------------------------------------------------------
+
+    result = handle_folder_open(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
+    # FOLDER CREATE
+    # --------------------------------------------------------
+
+    result = handle_folder_create(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
+    # WEB SEARCH
+    # --------------------------------------------------------
+
+    result = handle_web_search(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
+    # WEBSITE OPEN
+    # --------------------------------------------------------
+
+    result = handle_website_open(
+        command
+    )
+
+    if result:
+        return result
+
+    # --------------------------------------------------------
+    # CHROME OPEN
     # --------------------------------------------------------
 
     result = handle_chrome_open(
@@ -1204,7 +1995,7 @@ def detect_intent(command):
         return result
 
     # --------------------------------------------------------
-    # Chrome CLOSE
+    # CHROME CLOSE
     # --------------------------------------------------------
 
     result = handle_chrome_close(
@@ -1215,7 +2006,7 @@ def detect_intent(command):
         return result
 
     # --------------------------------------------------------
-    # Normal APP OPEN
+    # NORMAL APP OPEN
     # --------------------------------------------------------
 
     result = handle_application_open(
@@ -1226,7 +2017,7 @@ def detect_intent(command):
         return result
 
     # --------------------------------------------------------
-    # Normal APP CLOSE
+    # NORMAL APP CLOSE
     # --------------------------------------------------------
 
     result = handle_application_close(
@@ -1237,7 +2028,7 @@ def detect_intent(command):
         return result
 
     # --------------------------------------------------------
-    # Nothing handled
+    # NOTHING HANDLED
     # --------------------------------------------------------
 
     return {
@@ -1258,16 +2049,95 @@ if __name__ == "__main__":
     print()
 
     test_commands = [
+
+        # ----------------------------------------------------
+        # Websites
+        # ----------------------------------------------------
+
+        "open youtube",
+        "open gmail",
+        "open github",
+        "open instagram",
+        "open google",
+
+        # ----------------------------------------------------
+        # Web search
+        # ----------------------------------------------------
+
+        "search google for Python projects",
+        "search youtube for Aria AI assistant",
+        "google Python projects",
+        "youtube Aria AI assistant",
+
+        # ----------------------------------------------------
+        # Standard folders
+        # ----------------------------------------------------
+
+        "open downloads",
+        "open documents",
+        "open desktop",
+        "open pictures",
+        "open music",
+        "open videos",
+
+        # ----------------------------------------------------
+        # Custom folders
+        # ----------------------------------------------------
+
+        "open folder college",
+        "open college folder",
+        "open the college folder",
+
+        # ----------------------------------------------------
+        # Folder creation
+        # ----------------------------------------------------
+
+        "create folder Aria Notes",
+        "create a folder Test Files",
+        "create a folder called College Work",
+        "create a folder named Projects",
+        "make folder Aria Work",
+        "make a folder Test Folder",
+        "make a folder called College",
+
+        # ----------------------------------------------------
+        # Folder deletion
+        # ----------------------------------------------------
+
+        "delete folder Aria Notes",
+        "delete the folder named Aria Notes",
+        "delete the folder called Aria Notes",
+        "remove folder Aria Notes",
+        "remove the folder named Aria Notes",
+        "delete Aria Notes folder",
+
+        # ----------------------------------------------------
+        # VS Code
+        # ----------------------------------------------------
+
         "open vscode",
         "open vs code",
         "open vs-code",
         "open visual studio code",
         "open code",
         "close vscode",
+
+        # ----------------------------------------------------
+        # Applications
+        # ----------------------------------------------------
+
         "open notepad",
         "close notepad",
         "open calculator",
         "close calculator",
+        "close edge",
+        "close terminal",
+        "close powershell",
+
+        # ----------------------------------------------------
+        # Chrome
+        # ----------------------------------------------------
+
         "open college chrome",
         "open Satyam chrome",
         "close college chrome",
@@ -1277,14 +2147,10 @@ if __name__ == "__main__":
     for command in test_commands:
 
         print()
-        print(
-            f"> {command}"
-        )
+        print(f"> {command}")
 
         result = detect_intent(
             command
         )
 
-        print(
-            result
-        )
+        print(result)
