@@ -1,6 +1,10 @@
 import re
-import webbrowser
-from urllib.parse import quote_plus
+
+from commands.web_control import (
+    open_website as open_web_website,
+    google_search,
+    youtube_search,
+)
 
 from commands.computer_search import (
     search_applications,
@@ -30,25 +34,6 @@ from commands.file_control import (
 pending_app_results = []
 pending_chrome_profiles = []
 pending_folder_deletion = None
-
-
-# ============================================================
-# WEBSITE ALIASES
-# ============================================================
-
-WEBSITE_ALIASES = {
-    "youtube": "https://www.youtube.com",
-    "gmail": "https://mail.google.com",
-    "google": "https://www.google.com",
-    "github": "https://github.com",
-    "instagram": "https://www.instagram.com",
-    "facebook": "https://www.facebook.com",
-    "linkedin": "https://www.linkedin.com",
-    "whatsapp": "https://web.whatsapp.com",
-    "chatgpt": "https://chatgpt.com",
-    "reddit": "https://www.reddit.com",
-    "stackoverflow": "https://stackoverflow.com",
-}
 
 
 # ============================================================
@@ -191,57 +176,19 @@ def handle_website_open(command):
     if not target:
         return None
 
-    target = re.sub(
-        r"\bwebsite\b",
-        "",
-        target,
-    ).strip()
+    result = open_web_website(target)
 
-    target = re.sub(
-        r"\bsite\b",
-        "",
-        target,
-    ).strip()
-
-    if not is_known_website(target):
+    if not result.get("success"):
         return None
-
-    if open_website(target):
-
-        display_names = {
-            "youtube": "YouTube",
-            "gmail": "Gmail",
-            "google": "Google",
-            "github": "GitHub",
-            "instagram": "Instagram",
-            "facebook": "Facebook",
-            "linkedin": "LinkedIn",
-            "whatsapp": "WhatsApp",
-            "chatgpt": "ChatGPT",
-            "reddit": "Reddit",
-            "stackoverflow": "Stack Overflow",
-        }
-
-        display_name = display_names.get(
-            target,
-            target.title(),
-        )
-
-        return {
-            "handled": True,
-            "action": "open_website",
-            "target": target,
-            "response": (
-                f"Opening {display_name}."
-            ),
-        }
 
     return {
         "handled": True,
-        "action": "website_open_failed",
+        "action": "open_website",
         "target": target,
-        "response": (
-            f"I couldn't open {target}."
+        "url": result.get("url"),
+        "response": result.get(
+            "response",
+            f"Opening {target}."
         ),
     }
 
@@ -254,26 +201,21 @@ def handle_web_search(command):
 
     text = normalize(command)
 
-    search_engine = None
-    query = ""
-
-    # --------------------------------------------------------
-    # SEARCH GOOGLE
-    # --------------------------------------------------------
-
     google_match = re.match(
         r"^search\s+google\s+(?:for\s+)?(.+)$",
         text,
     )
 
     if google_match:
-
-        search_engine = "google"
         query = google_match.group(1).strip()
-
-    # --------------------------------------------------------
-    # SEARCH YOUTUBE
-    # --------------------------------------------------------
+        result = google_search(query)
+        return {
+            "handled": True,
+            "action": "web_search" if result.get("success") else "search_failed",
+            "target": query,
+            "engine": "google",
+            "response": result.get("response", "I couldn't perform that search."),
+        }
 
     youtube_match = re.match(
         r"^search\s+youtube\s+(?:for\s+)?(.+)$",
@@ -281,116 +223,49 @@ def handle_web_search(command):
     )
 
     if youtube_match:
-
-        search_engine = "youtube"
         query = youtube_match.group(1).strip()
-
-    # --------------------------------------------------------
-    # DIRECT GOOGLE SEARCH
-    # --------------------------------------------------------
-
-    if search_engine is None:
-
-        google_direct = re.match(
-            r"^google\s+(.+)$",
-            text,
-        )
-
-        if google_direct:
-
-            search_engine = "google"
-            query = google_direct.group(1).strip()
-
-    # --------------------------------------------------------
-    # DIRECT YOUTUBE SEARCH
-    # --------------------------------------------------------
-
-    if search_engine is None:
-
-        youtube_direct = re.match(
-            r"^youtube\s+(.+)$",
-            text,
-        )
-
-        if youtube_direct:
-
-            search_engine = "youtube"
-            query = youtube_direct.group(1).strip()
-
-    # --------------------------------------------------------
-    # Validate
-    # --------------------------------------------------------
-
-    if search_engine is None:
-        return None
-
-    if not query:
-
+        result = youtube_search(query)
         return {
             "handled": True,
-            "action": "search_failed",
-            "response": (
-                "What should I search for?"
-            ),
-        }
-
-    # --------------------------------------------------------
-    # Build URL
-    # --------------------------------------------------------
-
-    encoded_query = quote_plus(query)
-
-    if search_engine == "google":
-
-        url = (
-            "https://www.google.com/search"
-            f"?q={encoded_query}"
-        )
-
-        display_engine = "Google"
-
-    else:
-
-        url = (
-            "https://www.youtube.com/results"
-            f"?search_query={encoded_query}"
-        )
-
-        display_engine = "YouTube"
-
-    # --------------------------------------------------------
-    # Open browser
-    # --------------------------------------------------------
-
-    try:
-
-        webbrowser.open(url)
-
-        return {
-            "handled": True,
-            "action": "web_search",
+            "action": "web_search" if result.get("success") else "search_failed",
             "target": query,
-            "engine": search_engine,
-            "response": (
-                f"Searching {display_engine} "
-                f"for {query}."
-            ),
+            "engine": "youtube",
+            "response": result.get("response", "I couldn't perform that search."),
         }
 
-    except Exception as error:
+    google_direct = re.match(
+        r"^google\s+(.+)$",
+        text,
+    )
 
-        print(
-            f"Web search error: {error}"
-        )
-
+    if google_direct:
+        query = google_direct.group(1).strip()
+        result = google_search(query)
         return {
             "handled": True,
-            "action": "search_failed",
+            "action": "web_search" if result.get("success") else "search_failed",
             "target": query,
-            "response": (
-                "I couldn't perform that search."
-            ),
+            "engine": "google",
+            "response": result.get("response", "I couldn't perform that search."),
         }
+
+    youtube_direct = re.match(
+        r"^youtube\s+(.+)$",
+        text,
+    )
+
+    if youtube_direct:
+        query = youtube_direct.group(1).strip()
+        result = youtube_search(query)
+        return {
+            "handled": True,
+            "action": "web_search" if result.get("success") else "search_failed",
+            "target": query,
+            "engine": "youtube",
+            "response": result.get("response", "I couldn't perform that search."),
+        }
+
+    return None
 
 
 # ============================================================

@@ -402,6 +402,27 @@ def valid_memory_value(value: str) -> bool:
 
 
 # ==========================================================
+# MEMORY KEY NORMALIZATION
+# ==========================================================
+
+def normalize_memory_key(category: str, key: str) -> str:
+
+    key_aliases = {
+        "favorite_sport": "favorite_sports",
+        "favourite_sport": "favorite_sports",
+        "favourite_sports": "favorite_sports",
+    }
+
+    if category.lower() == "preferences":
+        key = key_aliases.get(
+            key.lower(),
+            key
+        )
+
+    return key
+
+
+# ==========================================================
 # SMART PERSONAL MEMORY
 # ==========================================================
 
@@ -778,7 +799,10 @@ def handle_memory(user_input: str):
 
         save_memory(
             "preferences",
-            f"favorite_{category.lower()}",
+            normalize_memory_key(
+                "preferences",
+                f"favorite_{category.lower()}"
+            ),
             value
         )
 
@@ -826,7 +850,10 @@ def handle_memory(user_input: str):
 
         save_memory(
             "preferences",
-            f"favorite_{category.lower()}",
+            normalize_memory_key(
+                "preferences",
+                f"favorite_{category.lower()}"
+            ),
             value
         )
 
