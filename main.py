@@ -1,3 +1,8 @@
+import threading
+
+from core.ui_state import set_state
+from ui_state_server import start_ui_state_server
+
 import asyncio
 
 import re
@@ -1041,6 +1046,8 @@ async def handle_computer_command(
 
         return False
 
+    set_state("EXECUTING")
+
     # ======================================================
     # COMPUTER COMMAND RESPONSE
     # ======================================================
@@ -1055,14 +1062,16 @@ async def handle_computer_command(
             f"Aria: {response}"
         )
 
+        set_state("SPEAKING")
+
         await speak(
             response,
             language=language
         )
 
+        set_state("IDLE")
+
     return True
-
-
 # ==========================================================
 # MAIN
 # ==========================================================
@@ -1072,7 +1081,6 @@ async def main():
     print("=" * 50)
 
     print("        ARIA - AI COMPANION")
-
     print("=" * 50)
 
     print("Aria is ready...")
@@ -1083,49 +1091,29 @@ async def main():
 
     while True:
 
-        try:
+        # ------------------------------------------------
+        # LISTEN
+        # ------------------------------------------------
 
-            # ------------------------------------------------
-            # LISTEN
-            # ------------------------------------------------
+        set_state("LISTENING")
 
-            result = listen()
+        result = listen()
 
-            if not result:
+        if not result:
 
-                continue
-
-            user_input, audio_data = result
-
-            if not user_input:
-
-                continue
-
-        except KeyboardInterrupt:
-
-            print()
-
-            print("Aria stopped.")
-
-            break
-
-        except OSError as e:
-
-            print()
-
-            print(f"Microphone error: {e}")
-
-            print("Restarting microphone...")
+            set_state("IDLE")
 
             continue
 
-        except Exception as e:
+        user_input, audio_data = result
 
-            print()
+        if not user_input:
 
-            print(f"Unexpected error: {e}")
+            set_state("IDLE")
 
             continue
+
+        set_state("THINKING")
 
         # ----------------------------------------------------
         # INPUT LANGUAGE
@@ -1148,7 +1136,7 @@ async def main():
             if language == "hi":
 
                 await speak(
-                    "अलविदा। अपना ख्याल रखना।",
+                    "अलविदा। अपना ख्याल रखना。",
                     language="hi"
                 )
 
@@ -1251,6 +1239,15 @@ async def main():
 # ==========================================================
 
 if __name__ == "__main__":
+
+    ui_thread = threading.Thread(
+        target=start_ui_state_server,
+        daemon=True
+    )
+
+    ui_thread.start()
+
+    set_state("IDLE")
 
     try:
 

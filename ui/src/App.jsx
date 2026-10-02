@@ -1,122 +1,248 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react";
+import "./App.css";
+
+const STATES = [
+  "IDLE",
+  "LISTENING",
+  "THINKING",
+  "EXECUTING",
+  "SPEAKING",
+];
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [ariaState, setAriaState] = useState("IDLE");
+
+  useEffect(() => {
+    const fetchAriaState = async () => {
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8765/state",
+          {
+            cache: "no-store",
+          }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        const nextState = String(data.state || "")
+          .trim()
+          .toUpperCase();
+
+        if (STATES.includes(nextState)) {
+          setAriaState(nextState);
+        }
+      } catch (error) {
+        console.error(
+          "ARIA state connection error:",
+          error
+        );
+      }
+    };
+
+    // Get the state immediately when the UI loads
+    fetchAriaState();
+
+    // Keep React synchronized with Python
+    const interval = setInterval(
+      fetchAriaState,
+      100
+    );
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <main
+      className={`aria-screen state-${ariaState.toLowerCase()}`}
+    >
+      <div className="space-noise" />
+
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
+
+      {/* ==================================================
+          HEADER
+          ================================================== */}
+
+      <header className="aria-header">
+        <div className="aria-brand">
+          <span className="brand-dot" />
+          <span>ARIA</span>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+
+        <div className="system-status">
+          <span className="status-dot" />
+          SYSTEM ONLINE
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+      </header>
+
+      {/* ==================================================
+          CORE STAGE
+          ================================================== */}
+
+      <section className="core-stage">
+        <div className="core-label">
+          ARTIFICIAL INTELLIGENCE CORE
+        </div>
+
+        <div className="aria-core">
+
+          {/* ==================================================
+              ORBIT 1
+              ================================================== */}
+
+          <div className="orbit orbit-one">
+            <div className="orbit-glow" />
+          </div>
+
+          {/* ==================================================
+              ORBIT 2
+              ================================================== */}
+
+          <div className="orbit orbit-two">
+            <div className="orbit-glow" />
+          </div>
+
+          {/* ==================================================
+              ORBIT 3
+              ================================================== */}
+
+          <div className="orbit orbit-three">
+            <div className="orbit-glow" />
+          </div>
+
+          {/* ==================================================
+              ORBIT 4
+              ================================================== */}
+
+          <div className="orbit orbit-four">
+            <div className="orbit-glow" />
+          </div>
+
+          {/* ==================================================
+              TECHNOLOGY RINGS
+              ================================================== */}
+
+          <div className="tech-ring tech-ring-one" />
+
+          <div className="tech-ring tech-ring-two" />
+
+          {/* ==================================================
+              ENERGY FIELD
+              ================================================== */}
+
+          <div className="energy-field">
+            <div className="energy-layer energy-layer-one" />
+
+            <div className="energy-layer energy-layer-two" />
+
+            <div className="energy-layer energy-layer-three" />
+          </div>
+
+          {/* ==================================================
+              CORE GLOW
+              ================================================== */}
+
+          <div className="core-glow" />
+
+          {/* ==================================================
+              MAIN CORE SPHERE
+              ================================================== */}
+
+          <div className="core-sphere">
+            <div className="core-inner">
+
+              <div className="core-light" />
+
+              <div className="core-hotspot" />
+
+            </div>
+          </div>
+
+          {/* ==================================================
+              PARTICLES
+              ================================================== */}
+
+          <div className="particles particles-one" />
+
+          <div className="particles particles-two" />
+
+          <div className="particles particles-three" />
+
+          {/* ==================================================
+              ENERGY FRAGMENTS
+              ================================================== */}
+
+          <div className="energy-fragments fragment-one" />
+
+          <div className="energy-fragments fragment-two" />
+
+          <div className="energy-fragments fragment-three" />
+
+        </div>
+
+        {/* ==================================================
+            CURRENT ARIA STATE
+            ================================================== */}
+
+        <div className="core-state">
+          <span className="state-pulse" />
+
+          <span>
+            {ariaState}
+          </span>
+        </div>
+
+        {/* ==================================================
+            STATE DESCRIPTION
+            ================================================== */}
+
+        <p className="core-subtitle">
+
+          {ariaState === "IDLE" &&
+            "Ready when you are."}
+
+          {ariaState === "LISTENING" &&
+            "Listening..."}
+
+          {ariaState === "THINKING" &&
+            "Processing intelligence..."}
+
+          {ariaState === "EXECUTING" &&
+            "Executing command..."}
+
+          {ariaState === "SPEAKING" &&
+            "Speaking..."}
+
+        </p>
       </section>
 
-      <div className="ticks"></div>
+      {/* ==================================================
+          FOOTER
+          ================================================== */}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <footer className="aria-footer">
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <div className="footer-line" />
+
+        <span>
+          ARIA INTELLIGENCE SYSTEM
+        </span>
+
+        <span>
+          V1.0
+        </span>
+
+      </footer>
+
+    </main>
+  );
 }
 
-export default App
+export default App;
