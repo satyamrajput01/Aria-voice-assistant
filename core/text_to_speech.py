@@ -1,38 +1,20 @@
 import os
 import subprocess
-from dotenv import load_dotenv
-from elevenlabs.client import ElevenLabs
+
+from core.ui_state import set_audio_level
 
 
 # ============================================================
-# ENVIRONMENT
+# SETTINGS
 # ============================================================
-
-load_dotenv()
-
-api_key = os.getenv("ELEVENLABS_API_KEY")
-
-if not api_key:
-    raise ValueError("ELEVENLABS_API_KEY is missing from .env")
-
-client = ElevenLabs(api_key=api_key)
-
-
-# ============================================================
-# PATHS
-# ============================================================
-
-VOICE_ID = "zzyrrX00vfq8JzvcccMi"
 
 BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
+    os.path.dirname(os.path.abspath(__file__))
 )
 
 KOKORO_SCRIPT = os.path.join(
     BASE_DIR,
-    "kokoro_tts.py"
+    "kokoro_tts.py",
 )
 
 
@@ -41,56 +23,41 @@ KOKORO_SCRIPT = os.path.join(
 # ============================================================
 
 def normalize_language(language: str) -> str:
-
     if not language:
         return "en"
 
-    language = language.lower().strip()
+    language = str(language).lower().strip()
 
     if language.startswith("hi"):
         return "hi"
-
-    if language.startswith("en"):
-        return "en"
 
     return "en"
 
 
 # ============================================================
-# KOKORO FALLBACK
+# LOCAL KOKORO SPEECH
 # ============================================================
 
-def speak_with_kokoro(
-    text: str,
-    language: str = "en"
-):
+def speak_with_kokoro(text: str, language: str = "en"):
+    text = str(text or "").strip()
+    language = normalize_language(language)
 
     if not text:
         return
 
-    language = normalize_language(language)
-
-    print(
-        f"Kokoro fallback → language={language}"
-    )
-
-    if not os.path.exists(KOKORO_SCRIPT):
-
-        print(
-            f"Kokoro script not found: "
-            f"{KOKORO_SCRIPT}"
-        )
-
+    if not os.path.isfile(KOKORO_SCRIPT):
+        print(f"Kokoro script not found: {KOKORO_SCRIPT}")
         return
 
     try:
+        print(f"Using local Kokoro TTS ({language})...")
 
         process = subprocess.run(
             [
                 "py",
                 "-3.11",
                 KOKORO_SCRIPT,
-                language
+                language,
             ],
             input=text,
             text=True,
@@ -98,137 +65,42 @@ def speak_with_kokoro(
             errors="replace",
             capture_output=True,
             timeout=180,
+            cwd=BASE_DIR,
         )
 
         if process.stdout:
-
-            print(
-                process.stdout.strip()
-            )
+            print(process.stdout.strip())
 
         if process.stderr:
-
-            print(
-                "Kokoro:",
-                process.stderr.strip()
-            )
+            print("Kokoro:", process.stderr.strip())
 
         if process.returncode != 0:
-
             print(
-                "Kokoro process failed "
-                f"with exit code "
-                f"{process.returncode}"
-            )
-
-        else:
-
-            print(
-                "Kokoro finished successfully."
+                "Kokoro failed with exit code",
+                process.returncode,
             )
 
     except subprocess.TimeoutExpired:
+        print("Kokoro TTS timed out.")
 
-        print(
-            "Kokoro TTS timed out."
-        )
+    except Exception as error:
+        print("Kokoro TTS error:", repr(error))
 
-    except Exception as e:
-
-        print(
-            "Kokoro TTS error:",
-            repr(e)
-        )
+    finally:
+        set_audio_level(0.0)
 
 
 # ============================================================
 # MAIN TTS FUNCTION
 # ============================================================
 
-async def speak(
-    text: str,
-    language: str = "en"
-):
-
-    if not text:
+async def speak(text: str, language: str = "en"):
+    if not text or not str(text).strip():
         return
 
-    language = normalize_language(
-        language
+    language = normalize_language(language)
+
+    speak_with_kokoro(
+        text=text,
+        language=language,
     )
-
-    # --------------------------------------------------------
-    # TRY ELEVENLABS FIRST
-    # --------------------------------------------------------
-
-    try:
-
-        print(
-            "Using ElevenLabs voice..."
-        )
-
-        audio = client.text_to_speech.convert(
-
-            voice_id=VOICE_ID,
-
-            text=text,
-
-            model_id="eleven_multilingual_v2",
-
-            output_format="mp3_44100_128",
-
-            voice_settings={
-
-                "stability": 0.45,
-
-                "similarity_boost": 0.80,
-
-                "style": 0.35,
-
-                "use_speaker_boost": True,
-            },
-        )
-
-        filename = os.path.join(
-            BASE_DIR,
-            "aria_output.mp3"
-        )
-
-        with open(
-            filename,
-            "wb"
-        ) as f:
-
-            for chunk in audio:
-
-                f.write(chunk)
-
-        print(
-            "ElevenLabs voice generated successfully."
-        )
-
-        os.startfile(
-            filename
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # ELEVENLABS FAILED → KOKORO
-    # --------------------------------------------------------
-
-    except Exception as e:
-
-        print(
-            "ElevenLabs TTS error:",
-            e
-        )
-
-        print(
-            "Falling back to local Kokoro..."
-        )
-
-        speak_with_kokoro(
-            text=text,
-            language=language
-        )

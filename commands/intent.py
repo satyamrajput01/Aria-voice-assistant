@@ -1,10 +1,7 @@
 import re
-
-from commands.web_control import (
-    open_website as open_web_website,
-    google_search,
-    youtube_search,
-)
+import webbrowser
+from datetime import datetime
+from urllib.parse import quote_plus
 
 from commands.computer_search import (
     search_applications,
@@ -34,6 +31,25 @@ from commands.file_control import (
 pending_app_results = []
 pending_chrome_profiles = []
 pending_folder_deletion = None
+
+
+# ============================================================
+# WEBSITE ALIASES
+# ============================================================
+
+WEBSITE_ALIASES = {
+    "youtube": "https://www.youtube.com",
+    "gmail": "https://mail.google.com",
+    "google": "https://www.google.com",
+    "github": "https://github.com",
+    "instagram": "https://www.instagram.com",
+    "facebook": "https://www.facebook.com",
+    "linkedin": "https://www.linkedin.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "chatgpt": "https://chatgpt.com",
+    "reddit": "https://www.reddit.com",
+    "stackoverflow": "https://stackoverflow.com",
+}
 
 
 # ============================================================
@@ -176,19 +192,57 @@ def handle_website_open(command):
     if not target:
         return None
 
-    result = open_web_website(target)
+    target = re.sub(
+        r"\bwebsite\b",
+        "",
+        target,
+    ).strip()
 
-    if not result.get("success"):
+    target = re.sub(
+        r"\bsite\b",
+        "",
+        target,
+    ).strip()
+
+    if not is_known_website(target):
         return None
+
+    if open_website(target):
+
+        display_names = {
+            "youtube": "YouTube",
+            "gmail": "Gmail",
+            "google": "Google",
+            "github": "GitHub",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+            "linkedin": "LinkedIn",
+            "whatsapp": "WhatsApp",
+            "chatgpt": "ChatGPT",
+            "reddit": "Reddit",
+            "stackoverflow": "Stack Overflow",
+        }
+
+        display_name = display_names.get(
+            target,
+            target.title(),
+        )
+
+        return {
+            "handled": True,
+            "action": "open_website",
+            "target": target,
+            "response": (
+                f"Opening {display_name}."
+            ),
+        }
 
     return {
         "handled": True,
-        "action": "open_website",
+        "action": "website_open_failed",
         "target": target,
-        "url": result.get("url"),
-        "response": result.get(
-            "response",
-            f"Opening {target}."
+        "response": (
+            f"I couldn't open {target}."
         ),
     }
 
@@ -201,21 +255,26 @@ def handle_web_search(command):
 
     text = normalize(command)
 
+    search_engine = None
+    query = ""
+
+    # --------------------------------------------------------
+    # SEARCH GOOGLE
+    # --------------------------------------------------------
+
     google_match = re.match(
         r"^search\s+google\s+(?:for\s+)?(.+)$",
         text,
     )
 
     if google_match:
+
+        search_engine = "google"
         query = google_match.group(1).strip()
-        result = google_search(query)
-        return {
-            "handled": True,
-            "action": "web_search" if result.get("success") else "search_failed",
-            "target": query,
-            "engine": "google",
-            "response": result.get("response", "I couldn't perform that search."),
-        }
+
+    # --------------------------------------------------------
+    # SEARCH YOUTUBE
+    # --------------------------------------------------------
 
     youtube_match = re.match(
         r"^search\s+youtube\s+(?:for\s+)?(.+)$",
@@ -223,49 +282,116 @@ def handle_web_search(command):
     )
 
     if youtube_match:
+
+        search_engine = "youtube"
         query = youtube_match.group(1).strip()
-        result = youtube_search(query)
+
+    # --------------------------------------------------------
+    # DIRECT GOOGLE SEARCH
+    # --------------------------------------------------------
+
+    if search_engine is None:
+
+        google_direct = re.match(
+            r"^google\s+(.+)$",
+            text,
+        )
+
+        if google_direct:
+
+            search_engine = "google"
+            query = google_direct.group(1).strip()
+
+    # --------------------------------------------------------
+    # DIRECT YOUTUBE SEARCH
+    # --------------------------------------------------------
+
+    if search_engine is None:
+
+        youtube_direct = re.match(
+            r"^youtube\s+(.+)$",
+            text,
+        )
+
+        if youtube_direct:
+
+            search_engine = "youtube"
+            query = youtube_direct.group(1).strip()
+
+    # --------------------------------------------------------
+    # Validate
+    # --------------------------------------------------------
+
+    if search_engine is None:
+        return None
+
+    if not query:
+
         return {
             "handled": True,
-            "action": "web_search" if result.get("success") else "search_failed",
-            "target": query,
-            "engine": "youtube",
-            "response": result.get("response", "I couldn't perform that search."),
+            "action": "search_failed",
+            "response": (
+                "What should I search for?"
+            ),
         }
 
-    google_direct = re.match(
-        r"^google\s+(.+)$",
-        text,
-    )
+    # --------------------------------------------------------
+    # Build URL
+    # --------------------------------------------------------
 
-    if google_direct:
-        query = google_direct.group(1).strip()
-        result = google_search(query)
+    encoded_query = quote_plus(query)
+
+    if search_engine == "google":
+
+        url = (
+            "https://www.google.com/search"
+            f"?q={encoded_query}"
+        )
+
+        display_engine = "Google"
+
+    else:
+
+        url = (
+            "https://www.youtube.com/results"
+            f"?search_query={encoded_query}"
+        )
+
+        display_engine = "YouTube"
+
+    # --------------------------------------------------------
+    # Open browser
+    # --------------------------------------------------------
+
+    try:
+
+        webbrowser.open(url)
+
         return {
             "handled": True,
-            "action": "web_search" if result.get("success") else "search_failed",
+            "action": "web_search",
             "target": query,
-            "engine": "google",
-            "response": result.get("response", "I couldn't perform that search."),
+            "engine": search_engine,
+            "response": (
+                f"Searching {display_engine} "
+                f"for {query}."
+            ),
         }
 
-    youtube_direct = re.match(
-        r"^youtube\s+(.+)$",
-        text,
-    )
+    except Exception as error:
 
-    if youtube_direct:
-        query = youtube_direct.group(1).strip()
-        result = youtube_search(query)
+        print(
+            f"Web search error: {error}"
+        )
+
         return {
             "handled": True,
-            "action": "web_search" if result.get("success") else "search_failed",
+            "action": "search_failed",
             "target": query,
-            "engine": "youtube",
-            "response": result.get("response", "I couldn't perform that search."),
+            "response": (
+                "I couldn't perform that search."
+            ),
         }
-
-    return None
 
 
 # ============================================================
@@ -1708,6 +1834,49 @@ def handle_application_close(command):
 
 
 # ============================================================
+# LOCAL TIME QUERY
+# ============================================================
+
+def handle_time_query(command):
+    """Answer common current-time requests using the computer's local clock."""
+    text = normalize(command)
+    text = re.sub(r"[?.!,]+", "", text).strip()
+
+    # Speech recognition can occasionally return the same phrase twice.
+    words = text.split()
+    if len(words) >= 2 and len(words) % 2 == 0:
+        midpoint = len(words) // 2
+        if words[:midpoint] == words[midpoint:]:
+            text = " ".join(words[:midpoint])
+
+    time_patterns = [
+        r"^what(?:'s| is) the time$",
+        r"^what time is it$",
+        r"^what is the time right now$",
+        r"^what time is it right now$",
+        r"^can you (?:say|tell me) (?:what is the time|what time it is)$",
+        r"^can you tell me the time$",
+        r"^(?:please )?tell me (?:the )?(?:current )?time$",
+        r"^(?:please )?say the time$",
+        r"^(?:what is the )?current time$",
+        r"^time now$",
+        r"^what is the current time$",
+    ]
+
+    if not any(re.fullmatch(pattern, text) for pattern in time_patterns):
+        return None
+
+    current_time = datetime.now().strftime("%I:%M %p").lstrip("0")
+    return {
+        "handled": True,
+        "success": True,
+        "action": "get_time",
+        "target": current_time,
+        "response": f"The current time is {current_time}.",
+    }
+
+
+# ============================================================
 # MAIN INTENT DETECTOR
 # ============================================================
 
@@ -1716,10 +1885,15 @@ def detect_intent(command):
     command = command.strip()
 
     if not command:
-
         return {
             "handled": False
         }
+
+    # Handle time requests locally before other intents and AI fallback.
+    result = handle_time_query(command)
+    if result:
+        print(f"[TIME DEBUG] {result['response']}")
+        return result
 
     # --------------------------------------------------------
     # FOLDER DELETE / CONFIRMATION
@@ -1924,6 +2098,15 @@ if __name__ == "__main__":
     print()
 
     test_commands = [
+
+        # ----------------------------------------------------
+        # Current time
+        # ----------------------------------------------------
+
+        "what is the time right now",
+        "what time is it right now",
+        "what's the time",
+        "what is the time right now what is the time right now",
 
         # ----------------------------------------------------
         # Websites

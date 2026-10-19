@@ -1561,3 +1561,443 @@ input {
     transform: scale(1.25);
   }
 }
+
+/* ===== ARIA HUD LAYOUT FIX ===== */
+
+.aria-header {
+  position: absolute;
+  top: 28px;
+  left: 34px;
+  right: 34px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header-metrics {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.system-clock {
+  color: rgba(133, 224, 255, 0.85);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-panel {
+  position: absolute;
+  top: 50%;
+  z-index: 10;
+  width: 215px;
+  padding: 18px;
+  box-sizing: border-box;
+  color: rgba(190, 229, 246, 0.78);
+  background: linear-gradient(
+    135deg,
+    rgba(9, 25, 39, 0.56),
+    rgba(3, 10, 19, 0.22)
+  );
+  border: 1px solid rgba(77, 194, 255, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translateY(-42%);
+}
+
+.hud-panel-left {
+  left: clamp(24px, 4vw, 72px);
+}
+
+.hud-panel-right {
+  right: clamp(24px, 4vw, 72px);
+}
+
+.hud-panel-title {
+  color: #8bdfff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.hud-panel-line {
+  height: 1px;
+  margin: 15px 0;
+  background: linear-gradient(
+    90deg,
+    rgba(77, 194, 255, 0.65),
+    transparent
+  );
+}
+
+.hud-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 17px 0;
+}
+
+.hud-row span,
+.module-name {
+  color: rgba(153, 198, 222, 0.65);
+  font-size: 9px;
+  letter-spacing: 1.3px;
+}
+
+.hud-row strong {
+  color: #d5f4ff;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+.hud-module {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 17px 0;
+}
+
+.hud-module > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hud-module small {
+  color: rgba(151, 197, 219, 0.65);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.module-indicator {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: rgba(113, 146, 164, 0.35);
+}
+
+.module-indicator.active {
+  background: #68e5ff;
+  box-shadow: 0 0 7px #26caff, 0 0 16px rgba(38, 202, 255, 0.75);
+  animation: hud-pulse 1.2s ease-in-out infinite;
+}
+
+.hud-footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(77, 194, 255, 0.12);
+  color: rgba(126, 190, 220, 0.5);
+  font-family: Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+@keyframes hud-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 1100px) {
+  .hud-panel {
+    width: 175px;
+    padding: 14px;
+  }
+
+  .hud-panel-left { left: 18px; }
+  .hud-panel-right { right: 18px; }
+}
+
+@media (max-width: 800px) {
+  .hud-panel { display: none; }
+
+  .header-metrics { gap: 12px; }
+
+  .system-clock {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+}
+
+
+.aria-core {
+  will-change: transform, filter;
+  transition: filter 350ms ease;
+}
+
+.core-sphere,
+.core-glow,
+.core-hotspot,
+.energy-layer,
+.orbit,
+.tech-ring,
+.particles,
+.energy-fragments {
+  transition: filter 300ms ease, opacity 300ms ease, border-color 300ms ease;
+}
+
+/* IDLE — slow, restrained breathing. */
+.state-idle .aria-core {
+  filter: saturate(.92);
+}
+
+.state-idle .core-sphere {
+  filter: brightness(.96) saturate(.92);
+  box-shadow:
+    0 0 14px rgba(0, 225, 255, .58),
+    0 0 42px rgba(0, 168, 255, .34),
+    0 0 95px rgba(0, 112, 255, .22),
+    inset 0 0 34px rgba(0, 216, 255, .2);
+}
+
+.state-idle .energy-layer {
+  border-color: rgba(0, 213, 255, .1);
+}
+
+.state-idle .energy-fragments {
+  opacity: .48;
+}
+
+/* LISTENING — brighter cyan response and expanding energy field. */
+.state-listening .aria-core {
+  filter: saturate(1.28) brightness(1.08);
+}
+
+.state-listening .core-sphere {
+  animation: sphere-breathe 1.25s ease-in-out infinite,
+             reactor-listening-surface 1.25s ease-in-out infinite;
+}
+
+.state-listening .core-glow {
+  filter: blur(15px) saturate(1.35);
+}
+
+.state-listening .core-hotspot {
+  animation: hotspot-pulse 2.2s ease-in-out infinite,
+             reactor-hotspot-listening .85s ease-in-out infinite;
+}
+
+.state-listening .energy-layer {
+  border-color: rgba(53, 230, 255, .3);
+  box-shadow: 0 0 24px rgba(0, 211, 255, .1),
+              inset 0 0 25px rgba(0, 211, 255, .08);
+}
+
+.state-listening .orbit {
+  border-color: rgba(69, 231, 255, .42);
+  filter: drop-shadow(0 0 4px rgba(0, 213, 255, .32));
+}
+
+.state-listening .particles {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px rgba(0, 224, 255, .9));
+}
+
+/* THINKING — tighter, quicker orbital motion and a concentrated core. */
+.state-thinking .aria-core {
+  filter: saturate(1.22) contrast(1.06);
+}
+
+.state-thinking .core-sphere {
+  animation: sphere-breathe 1s ease-in-out infinite,
+             reactor-thinking-surface 1s ease-in-out infinite;
+}
+
+.state-thinking .core-hotspot {
+  animation: hotspot-pulse 2.2s ease-in-out infinite,
+             reactor-hotspot-thinking .7s ease-in-out infinite;
+}
+
+.state-thinking .tech-ring {
+  border-color: rgba(83, 224, 255, .48);
+  filter: drop-shadow(0 0 5px rgba(0, 166, 255, .28));
+}
+
+.state-thinking .energy-layer {
+  border-color: rgba(37, 190, 255, .28);
+}
+/* ============================================================
+   ARIA — AUDIO-REACTIVE CORE
+   --audio-level ranges from 0 to 1
+   ============================================================ */
+
+.aria-screen {
+  --audio-level: 0;
+}
+
+.core-glow {
+  transform: scale(calc(1 + var(--audio-level) * 0.14));
+  filter: brightness(calc(1 + var(--audio-level) * 1.1));
+  transition:
+    transform 55ms linear,
+    filter 55ms linear;
+}
+
+.core-sphere {
+  transform: scale(calc(1 + var(--audio-level) * 0.055));
+  filter: brightness(calc(1 + var(--audio-level) * 0.3));
+  transition:
+    transform 55ms linear,
+    filter 55ms linear;
+}
+
+.core-light {
+  filter: brightness(calc(1 + var(--audio-level) * 1.5));
+  transition: filter 55ms linear;
+}
+
+.core-hotspot {
+  opacity: calc(0.7 + var(--audio-level) * 0.3);
+  transform: scale(calc(1 + var(--audio-level) * 0.12));
+  transition:
+    opacity 55ms linear,
+    transform 55ms linear;
+}
+
+.energy-field {
+  filter: brightness(calc(1 + var(--audio-level) * 0.9));
+  transition: filter 55ms linear;
+}
+
+.energy-layer {
+  opacity: calc(0.55 + var(--audio-level) * 0.45);
+  transition: opacity 55ms linear;
+}
+
+.state-speaking .core-glow {
+  box-shadow:
+    0 0 calc(30px + var(--audio-level) * 90px)
+      rgba(68, 180, 255, calc(0.25 + var(--audio-level) * 0.55)),
+    0 0 calc(70px + var(--audio-level) * 120px)
+      rgba(50, 100, 255, calc(0.15 + var(--audio-level) * 0.35));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .core-glow,
+  .core-sphere,
+  .core-light,
+  .core-hotspot,
+  .energy-field,
+  .energy-layer {
+    transition-duration: 100ms;
+  }
+}
+
+/* UI control buttons — appended to the existing Aria theme */
+.aria-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+  position: relative;
+  z-index: 5;
+}
+
+.aria-control-button {
+  min-width: 92px;
+  padding: 10px 18px;
+  border: 1px solid rgba(60, 230, 255, 0.48);
+  border-radius: 999px;
+  background: rgba(5, 27, 40, 0.78);
+  color: #d7fbff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(20, 210, 255, 0.08);
+  transition: background 160ms ease, border-color 160ms ease,
+    box-shadow 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.aria-control-button:hover:not(:disabled) {
+  background: rgba(11, 76, 94, 0.88);
+  border-color: rgba(90, 241, 255, 0.95);
+  box-shadow: 0 0 18px rgba(20, 210, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.aria-control-button:focus-visible {
+  outline: 2px solid #8cf7ff;
+  outline-offset: 3px;
+}
+
+.aria-control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.aria-control-button.primary {
+  color: #05151b;
+  border-color: #65f2ff;
+  background: #65eaff;
+  box-shadow: 0 0 20px rgba(35, 220, 255, 0.22);
+}
+
+.aria-control-button.primary:hover:not(:disabled) {
+  background: #a0f7ff;
+}
+
+.aria-control-button.danger {
+  color: #ffdfe3;
+  border-color: rgba(255, 93, 120, 0.55);
+  background: rgba(68, 15, 29, 0.62);
+}
+
+.aria-control-button.danger:hover:not(:disabled) {
+  border-color: #ff6b86;
+  background: rgba(115, 19, 41, 0.86);
+  box-shadow: 0 0 18px rgba(255, 64, 103, 0.18);
+}
+
+.aria-control-error,
+.aria-control-note {
+  max-width: 440px;
+  margin: 10px auto 0;
+  padding: 0 16px;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.aria-control-error {
+  color: #ff9eae;
+}
+
+.aria-control-note {
+  color: rgba(173, 219, 229, 0.68);
+}
+
+.state-paused .core-sphere,
+.state-paused .core-glow {
+  animation-play-state: paused;
+}
+
+.state-stopped .core-sphere,
+.state-stopped .core-glow {
+  animation-play-state: paused;
+  opacity: 0.55;
+}
+
+@media (max-width: 560px) {
+  .aria-controls {
+    gap: 8px;
+  }
+
+  .aria-control-button {
+    min-width: 82px;
+    padding: 9px 13px;
+    font-size: 0.7rem;
+  }
+}

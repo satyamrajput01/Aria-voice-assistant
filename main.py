@@ -16,6 +16,13 @@ from core.brain import get_reply
 from core.memory import save_memory
 
 from commands.intent import detect_intent
+from core.ui_controls import (
+    get_control_mode,
+    get_generation,
+    is_active,
+    set_control,
+    wait_until_active,
+)
 
 
 # ==========================================================
@@ -1027,7 +1034,9 @@ async def handle_computer_command(
 
     user_input: str,
 
-    language: str
+    language: str,
+
+    generation: int | None = None
 
 ) -> bool:
 
@@ -1035,12 +1044,21 @@ async def handle_computer_command(
     Handle safe computer commands.
 
     Chrome profile commands and normal application commands
-    are executed by intent.py.
+    are executed by intent.py. UI control changes are checked
+    before dispatching and before speaking the response.
     """
+
+    if generation is not None and not is_active(generation):
+
+        return False
 
     intent = detect_intent(
         user_input
     )
+
+    if generation is not None and not is_active(generation):
+
+        return False
 
     if not intent.get("handled"):
 
@@ -1058,6 +1076,10 @@ async def handle_computer_command(
 
     if response:
 
+        if generation is not None and not is_active(generation):
+
+            return True
+
         print(
             f"Aria: {response}"
         )
@@ -1069,11 +1091,17 @@ async def handle_computer_command(
             language=language
         )
 
+        if generation is not None and not is_active(generation):
+
+            set_state("IDLE")
+
+            return True
+
         set_state("IDLE")
 
     return True
-# ==========================================================
-# MAIN
+
+
 # ==========================================================
 
 async def main():
@@ -1091,6 +1119,10 @@ async def main():
 
     while True:
 
+        # Wait while the UI has paused or stopped the assistant.
+        wait_until_active()
+        generation = get_generation()
+
         # ------------------------------------------------
         # LISTEN
         # ------------------------------------------------
@@ -1098,6 +1130,14 @@ async def main():
         set_state("LISTENING")
 
         result = listen()
+
+        # Microphone capture is blocking. If a UI control was used
+        # during capture, discard this result instead of processing it.
+        if not is_active(generation):
+
+            set_state("IDLE")
+
+            continue
 
         if not result:
 
@@ -1127,11 +1167,19 @@ async def main():
             f"Language: {language}"
         )
 
+        if not is_active(generation):
+
+            set_state("IDLE")
+
+            continue
+
         # ----------------------------------------------------
         # EXIT
         # ----------------------------------------------------
 
         if is_exit_command(user_input):
+
+            set_control("STOP")
 
             if language == "hi":
 
@@ -1159,11 +1207,19 @@ async def main():
 
                 user_input=user_input,
 
-                language=language
+                language=language,
+
+                generation=generation
 
             )
 
         )
+
+        if not is_active(generation):
+
+            set_state("IDLE")
+
+            continue
 
         if computer_command_handled:
 
@@ -1176,6 +1232,12 @@ async def main():
         memory_saved = handle_memory(
             user_input
         )
+
+        if not is_active(generation):
+
+            set_state("IDLE")
+
+            continue
 
         if memory_saved:
 
@@ -1194,6 +1256,14 @@ async def main():
             language=language
 
         )
+
+        # Ignore stale AI responses if Pause/Stop/Start happened
+        # while the Groq request was in progress.
+        if not is_active(generation):
+
+            set_state("IDLE")
+
+            continue
 
         print(
             f"Aria: {reply}"
@@ -1225,6 +1295,8 @@ async def main():
         # SPEAK
         # ----------------------------------------------------
 
+        set_state("SPEAKING")
+
         await speak(
 
             reply,
@@ -1232,6 +1304,8 @@ async def main():
             language=output_language
 
         )
+
+        set_state("IDLE")
 
 
 # ==========================================================
