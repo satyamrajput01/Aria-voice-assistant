@@ -23,6 +23,8 @@ from commands.file_control import (
     find_custom_folder,
 )
 
+from commands.desktop_control import handle_desktop_command
+
 
 # ============================================================
 # STATE
@@ -1924,6 +1926,14 @@ def detect_intent(command):
 
         if result:
             return result
+
+    # --------------------------------------------------------
+    # Explicit mouse and keyboard commands
+    # --------------------------------------------------------
+
+    result = handle_desktop_command(command)
+    if result is not None:
+        return result
 
     # --------------------------------------------------------
     # Pending Chrome selection
